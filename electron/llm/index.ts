@@ -134,6 +134,11 @@ export type {
     PrepareSdRequirementsInput,
     PrepareSdRequirementsResult,
 } from "./sdRequirementsLive";
+export { deriveSdSessionAuthority } from "./sdSessionAuthority";
+export type {
+    SdSessionAuthority,
+    DeriveSdSessionAuthorityInput,
+} from "./sdSessionAuthority";
 export {
     buildSdDeepDivePackSnapshot,
     buildDeepDiveCheckContext,

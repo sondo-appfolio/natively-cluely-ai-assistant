@@ -22,6 +22,7 @@ import {
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
+    deriveSdSessionAuthority,
     detectAdvanceSignal,
 } from './llm';
 import {
@@ -3363,7 +3364,11 @@ export class IntelligenceEngine extends EventEmitter {
         screenContext?: ScreenContext | null,
         gateOpts?: { uiAdvance?: boolean; sdProblemKeyPinned?: boolean },
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
-        if (answerPlan.answerType !== 'system_design_answer') {
+        const modeId = this.getActiveModeId();
+        const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+        const authority = deriveSdSessionAuthority({ artifact: priorArtifact, modeId });
+        const isSdAnswer = answerPlan.answerType === 'system_design_answer';
+        if (!isSdAnswer && !authority.shouldArmGate) {
             this.publishSdRequirementsGateStatus(false);
             return { answerPlan, softRefuseSpoken: null };
         }
@@ -3391,7 +3396,6 @@ export class IntelligenceEngine extends EventEmitter {
             // Only treat the current question as advance when it itself matches
             // an advance phrase (manual "let's move on") — never re-scan the
             // whole window as a sticky soft-refuse.
-            const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
             const prepared = prepareSdRequirementsForAnswerPlan({
                 answerPlan,
                 artifact: priorArtifact,
@@ -3404,6 +3408,7 @@ export class IntelligenceEngine extends EventEmitter {
                     ? [problemQuestion]
                     : undefined,
                 uiAdvance: gateOpts?.uiAdvance === true,
+                modeId,
             });
 
             if (prepared.artifact) {

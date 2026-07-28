@@ -1,8 +1,9 @@
 // electron/llm/__tests__/SimPostRequirementsAnswerStripTier0.test.mjs
 //
-// Regression for diagnosing-bugs SPEC 15 live miss:
-// clarifier turns plan as general_meeting_answer → gate prepare early-returns →
-// WTA never strips → Requirements Draft survives.
+// Regression for diagnosing-bugs SPEC 15 live miss / SdSessionAuthority ticket 01:
+// clarifier turns plan as general_meeting_answer; under TI + sticky problemKey,
+// prepare stamps sdPhase so WTA/IE can strip. Without authority modeId, prepare
+// stays inert (legacy non-armed path).
 //
 // IE-level strip must clear drafts when sdProblemKey is pinned and the session
 // artifact is already post_requirements — independent of answerType.
@@ -52,7 +53,25 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     assert.equal(planned.answerType, 'general_meeting_answer');
   });
 
-  test('prepare early-returns without sdPhase for non-SD answerType', () => {
+  test('prepare under authority stamps sdPhase for GM when TI + sticky key', () => {
+    const planned = planAnswer({
+      question: 'For analytics, total clicks only or geo/device?',
+      source: 'what_to_answer',
+      activeMode: { templateType: 'technical-interview' },
+    });
+    assert.equal(planned.answerType, 'general_meeting_answer');
+    const prepared = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: planned,
+      artifact: closedArtifact(),
+      problemQuestion: 'Design a URL shortener like Bitly.',
+      interviewerTexts: ['geo?'],
+      modeId: 'technical-interview',
+    });
+    assert.equal(prepared.sdPhase, 'post_requirements');
+    assert.equal(prepared.answerPlan.sdPhase, 'post_requirements');
+  });
+
+  test('prepare stays inert for GM without modeId even when artifact is closed', () => {
     const planned = planAnswer({
       question: 'For analytics, total clicks only or geo/device?',
       source: 'what_to_answer',
