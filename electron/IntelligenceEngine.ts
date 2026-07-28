@@ -1973,6 +1973,7 @@ export class IntelligenceEngine extends EventEmitter {
                 fullAnswer = applySimPostRequirementsAnswerStrip(fullAnswer, {
                     sdProblemKey: options?.sdProblemKey,
                     artifact: this.session.getSdRequirementsArtifact?.() ?? null,
+                    modeId: this.getActiveModeId(),
                 });
             } catch (stripErr: any) {
                 console.warn(

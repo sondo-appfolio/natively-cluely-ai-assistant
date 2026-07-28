@@ -97,9 +97,20 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     assert.match(draftText, DRAFT_RE);
     const artifact = closedArtifact();
     assert.ok(artifact.problemKey);
-    const out = live.applySimPostRequirementsAnswerStrip(draftText, { artifact });
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      artifact,
+      modeId: 'technical-interview',
+    });
     assert.doesNotMatch(out, DRAFT_RE);
     assert.match(out, /aligned on the scope of the analytics/i);
+  });
+
+  test('leave TI: sticky artifact does not strip (authority inert)', () => {
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      artifact: closedArtifact(),
+      modeId: 'behavioral',
+    });
+    assert.equal(out, draftText);
   });
 
   test('sim pin seed: strip still clears draft when pinned + closed artifact', () => {
@@ -116,6 +127,7 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     const orphan = { ...closedArtifact(), problemKey: null };
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
       artifact: orphan,
+      modeId: 'technical-interview',
     });
     assert.equal(out, draftText);
   });
@@ -124,6 +136,7 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     const open = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
       artifact: open,
+      modeId: 'technical-interview',
     });
     assert.equal(out, draftText);
   });
@@ -143,7 +156,10 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     assert.equal(a.gateClosed, false);
     assert.ok(a.problemKey);
 
-    const out = live.applySimPostRequirementsAnswerStrip(draftText, { artifact: a });
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      artifact: a,
+      modeId: 'technical-interview',
+    });
     assert.doesNotMatch(out, DRAFT_RE);
     assert.match(out, /aligned on the scope of the analytics/i);
   });

@@ -328,30 +328,32 @@ export function appendSimPostRequirementsNudge(
 /**
  * Product + sim (SPEC 15/16/17 + SdSessionAuthority ticket 03): strip late
  * Requirements Draft restatements from the completed WTA answer when an SD
- * session is open and Requirements are done — either gateClosed
+ * session is armed and Requirements are done — either gateClosed
  * (post_requirements) OR checklist complete (advance may not have fired yet).
  * Independent of answerType (covers GM clarifier turns).
  *
- * Session open = sticky artifact.problemKey (product) OR optional sdProblemKey
- * pin as a sim/test seed adapter. Soft nudge remains pin-only separately.
+ * Arms when `shouldArmGate` (TI + sticky artifact.problemKey) OR optional
+ * `sdProblemKey` pin as a sim/test seed. Soft nudge remains pin-only separately.
+ * Leave-TI freezes the artifact but does not strip outside TI (authority inert).
  */
 export function applySimPostRequirementsAnswerStrip(
   text: string,
   opts: {
     sdProblemKey?: string | null;
     artifact?: RequirementsArtifact | null;
+    /** Active mode templateType; required for product shouldArmGate path. */
+    modeId?: string | null;
   } = {},
 ): string {
   const artifact = opts.artifact ?? null;
-  const stickyKey =
-    typeof artifact?.problemKey === 'string' && artifact.problemKey.trim().length > 0
-      ? artifact.problemKey.trim()
-      : null;
   const pinned =
     typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
-  // Product: sticky artifact key. Sim: pin may seed early identity before stickiness.
-  const sessionOpen = stickyKey != null || pinned;
-  if (!sessionOpen) return String(text || '');
+  const authority = deriveSdSessionAuthority({
+    artifact,
+    modeId: opts.modeId,
+  });
+  // Product: TI + sticky key. Sim: pin may seed early identity before stickiness.
+  if (!authority.shouldArmGate && !pinned) return String(text || '');
   const requirementsDone =
     deriveSdPhase(artifact) === 'post_requirements' ||
     (artifact != null && isChecklistComplete(artifact));
