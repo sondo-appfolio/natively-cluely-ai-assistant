@@ -26,6 +26,9 @@ export interface DeriveSdSessionAuthorityInput {
  * Derive session-scoped gate arming for this turn.
  * sessionOpen = sticky problemKey already established by a prior SD prepare.
  * shouldArmGate = Technical Interview AND session open.
+ * Leaving TI → shouldArmGate false immediately while the artifact may still
+ * be frozen on SessionTracker (sessionOpen can remain true until meeting end
+ * or new-SD-problem reset).
  */
 export function deriveSdSessionAuthority(
   input: DeriveSdSessionAuthorityInput,
