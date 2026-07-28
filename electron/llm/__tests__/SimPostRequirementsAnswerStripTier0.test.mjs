@@ -1,34 +1,40 @@
 // electron/llm/__tests__/SimPostRequirementsAnswerStripTier0.test.mjs
 //
-// Regression for diagnosing-bugs SPEC 15 live miss / SdSessionAuthority ticket 01:
-// clarifier turns plan as general_meeting_answer; under TI + sticky problemKey,
-// prepare stamps sdPhase so WTA/IE can strip. Without authority modeId, prepare
-// stays inert (legacy non-armed path).
-//
-// IE-level strip must clear drafts when sdProblemKey is pinned and the session
-// artifact is already post_requirements — independent of answerType.
+// SdSessionAuthority ticket 03 / SPEC 15–17 product generalization:
+// once an SD session is open (sticky problemKey on the artifact), late
+// Requirements Draft restatements are stripped when phase is post_requirements
+// OR checklist is complete — without requiring sdProblemKey pin.
+// Pin remains an optional sim seed adapter for early sticky identity.
+// Soft post-requirements nudge stays sim-only (tested elsewhere).
 //
 // Run: npm run build:electron && node --test electron/llm/__tests__/SimPostRequirementsAnswerStripTier0.test.mjs
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distLlm = path.resolve(__dirname, '../../../dist-electron/electron/llm');
-const draftFixture = path.resolve(
-  __dirname,
-  '../../../.scratch/sd-interview-sim/debug/smoke-turn31-draft.txt',
-);
 
 const gate = await import(pathToFileURL(path.join(distLlm, 'sdRequirementsGate.js')).href);
 const live = await import(pathToFileURL(path.join(distLlm, 'sdRequirementsLive.js')).href);
 const { planAnswer } = await import(pathToFileURL(path.join(distLlm, 'AnswerPlanner.js')).href);
 
 const DRAFT_RE = /Requirements Draft:/i;
-const draftText = fs.readFileSync(draftFixture, 'utf8');
+// Inline smoke-turn31 draft (was .scratch/.../smoke-turn31-draft.txt; untracked).
+const draftText = [
+  'That makes sense. To make sure we\'re aligned on the scope of the analytics,',
+  'are we tracking just the total click count per link, or do we need to support',
+  'granular, time-series data like geographic location, device type, and referral',
+  'source for every click?',
+  '',
+  '**Requirements Draft:**',
+  '*   **Functional:**',
+  '*   Shorten long URLs into unique, short aliases.',
+  '*   **Non-Functional:**',
+  '*   High availability (redirects must always work).',
+].join('\n');
 
 function closedArtifact() {
   let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
@@ -43,7 +49,7 @@ function closedArtifact() {
   return gate.acceptAdvance(a);
 }
 
-describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
+describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', () => {
   test('planner clarifier is general_meeting_answer (load-bearing for the bug)', () => {
     const planned = planAnswer({
       question: 'For analytics, total clicks only or geo/device?',
@@ -87,7 +93,16 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     assert.equal(prepared.answerPlan.sdPhase, undefined);
   });
 
-  test('IE-level strip clears smoke draft when pinned + closed artifact', () => {
+  test('product path: strip clears smoke draft when session open + closed artifact (no pin)', () => {
+    assert.match(draftText, DRAFT_RE);
+    const artifact = closedArtifact();
+    assert.ok(artifact.problemKey);
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, { artifact });
+    assert.doesNotMatch(out, DRAFT_RE);
+    assert.match(out, /aligned on the scope of the analytics/i);
+  });
+
+  test('sim pin seed: strip still clears draft when pinned + closed artifact', () => {
     assert.match(draftText, DRAFT_RE);
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
       sdProblemKey: 'Design a URL shortener like Bitly.',
@@ -97,9 +112,10 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     assert.match(out, /aligned on the scope of the analytics/i);
   });
 
-  test('identity without sdProblemKey (product path)', () => {
+  test('identity when session not open (no sticky key, no pin)', () => {
+    const orphan = { ...closedArtifact(), problemKey: null };
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
-      artifact: closedArtifact(),
+      artifact: orphan,
     });
     assert.equal(out, draftText);
   });
@@ -107,13 +123,12 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
   test('identity while gate still open and checklist incomplete', () => {
     const open = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
-      sdProblemKey: 'Design a URL shortener like Bitly.',
       artifact: open,
     });
     assert.equal(out, draftText);
   });
 
-  test('SPEC 17: strips when pinned + checklist complete even if gate not closed', () => {
+  test('SPEC 17 product: strips when session open + checklist complete even if gate not closed', () => {
     let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
     for (const id of [
       'functional_requirements',
@@ -126,6 +141,25 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     assert.equal(gate.isChecklistComplete(a), true);
     assert.equal(gate.deriveSdPhase(a), 'requirements');
     assert.equal(a.gateClosed, false);
+    assert.ok(a.problemKey);
+
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, { artifact: a });
+    assert.doesNotMatch(out, DRAFT_RE);
+    assert.match(out, /aligned on the scope of the analytics/i);
+  });
+
+  test('SPEC 17 pin seed: strips when pinned + checklist complete even if gate not closed', () => {
+    let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
+    for (const id of [
+      'functional_requirements',
+      'scale_qps',
+      'latency',
+      'consistency_availability',
+    ]) {
+      a = gate.fillSlotFromInterviewer(a, id, 'filled');
+    }
+    assert.equal(gate.isChecklistComplete(a), true);
+    assert.equal(a.gateClosed, false);
 
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
       sdProblemKey: 'Design a URL shortener like Bitly.',
@@ -133,5 +167,17 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     });
     assert.doesNotMatch(out, DRAFT_RE);
     assert.match(out, /aligned on the scope of the analytics/i);
+  });
+
+  test('soft nudge remains pin-gated (product path identity)', () => {
+    const nudged = live.appendSimPostRequirementsNudge('Continue deep dive.', {
+      sdPhase: 'post_requirements',
+    });
+    assert.equal(nudged, 'Continue deep dive.');
+    const sim = live.appendSimPostRequirementsNudge('Continue deep dive.', {
+      sdProblemKey: 'Design a URL shortener like Bitly.',
+      sdPhase: 'post_requirements',
+    });
+    assert.match(sim, /Requirements for this problem are already locked/);
   });
 });

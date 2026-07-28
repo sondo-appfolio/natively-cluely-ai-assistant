@@ -326,10 +326,14 @@ export function appendSimPostRequirementsNudge(
 }
 
 /**
- * Sim-only (SPEC 15/16/17): strip late Requirements Draft restatements from the
- * completed WTA answer when T2 pins sdProblemKey and Requirements are done —
- * either gateClosed (post_requirements) OR checklist complete (advance may not
- * have fired yet). Independent of answerType.
+ * Product + sim (SPEC 15/16/17 + SdSessionAuthority ticket 03): strip late
+ * Requirements Draft restatements from the completed WTA answer when an SD
+ * session is open and Requirements are done — either gateClosed
+ * (post_requirements) OR checklist complete (advance may not have fired yet).
+ * Independent of answerType (covers GM clarifier turns).
+ *
+ * Session open = sticky artifact.problemKey (product) OR optional sdProblemKey
+ * pin as a sim/test seed adapter. Soft nudge remains pin-only separately.
  */
 export function applySimPostRequirementsAnswerStrip(
   text: string,
@@ -338,10 +342,16 @@ export function applySimPostRequirementsAnswerStrip(
     artifact?: RequirementsArtifact | null;
   } = {},
 ): string {
+  const artifact = opts.artifact ?? null;
+  const stickyKey =
+    typeof artifact?.problemKey === 'string' && artifact.problemKey.trim().length > 0
+      ? artifact.problemKey.trim()
+      : null;
   const pinned =
     typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
-  if (!pinned) return String(text || '');
-  const artifact = opts.artifact ?? null;
+  // Product: sticky artifact key. Sim: pin may seed early identity before stickiness.
+  const sessionOpen = stickyKey != null || pinned;
+  if (!sessionOpen) return String(text || '');
   const requirementsDone =
     deriveSdPhase(artifact) === 'post_requirements' ||
     (artifact != null && isChecklistComplete(artifact));
