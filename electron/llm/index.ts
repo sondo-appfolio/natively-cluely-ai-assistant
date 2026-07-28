@@ -134,7 +134,10 @@ export type {
     PrepareSdRequirementsInput,
     PrepareSdRequirementsResult,
 } from "./sdRequirementsLive";
-export { deriveSdSessionAuthority } from "./sdSessionAuthority";
+export {
+    deriveSdSessionAuthority,
+    projectGateStatusUnderAuthority,
+} from "./sdSessionAuthority";
 export type {
     SdSessionAuthority,
     DeriveSdSessionAuthorityInput,

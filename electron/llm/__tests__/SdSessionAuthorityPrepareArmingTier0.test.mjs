@@ -3,6 +3,7 @@
 // Ticket 01 — SdSessionAuthority: TI + sticky problemKey arms prepare on
 // general_meeting_answer clarifiers; no key / non-TI stay inert; clarifier
 // alone never opens a session; system_design_answer still establishes sticky key.
+// Ticket 04 — overlay publish/hide follows shouldArmGate (not answerType).
 //
 // Run: npm run build:electron && node --test electron/llm/__tests__/SdSessionAuthorityPrepareArmingTier0.test.mjs
 
@@ -222,5 +223,56 @@ describe('prepareSdRequirementsForAnswerPlan under authority', () => {
     assert.equal(prepared.artifact.problemKey, PROBLEM);
     assert.equal(prepared.sdPhase, 'requirements');
     assert.equal(prepared.artifact.slots.scale_qps.filled, true);
+  });
+});
+
+// Ticket 04 — overlay publish/hide follows shouldArmGate, not answerType.
+describe('overlay under SdSessionAuthority', () => {
+  test('TI + open session → overlay shown (GM answerType irrelevant)', () => {
+    const planned = gmPlan();
+    assert.equal(planned.answerType, 'general_meeting_answer');
+    const a = openArtifact();
+    assert.equal(
+      authority.deriveSdSessionAuthority({ artifact: a, modeId: TI }).shouldArmGate,
+      true,
+    );
+    const vm = authority.projectGateStatusUnderAuthority(a, TI);
+    assert.equal(vm.visible, true);
+    assert.match(vm.progressLabel, /Requirements/);
+  });
+
+  test('after GM prepare under authority, overlay stays shown', () => {
+    const planned = gmPlan();
+    const prior = openArtifact();
+    const prepared = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: planned,
+      artifact: prior,
+      problemQuestion: 'For analytics, total clicks only or geo/device?',
+      interviewerTexts: ['Functional requirements: create short links and redirect'],
+      modeId: TI,
+    });
+    assert.equal(prepared.sdPhase, 'requirements');
+    const vm = authority.projectGateStatusUnderAuthority(prepared.artifact, TI);
+    assert.equal(vm.visible, true);
+    assert.ok(vm.filled >= 1);
+  });
+
+  test('non-TI → overlay hidden even with open requirements artifact', () => {
+    const a = openArtifact();
+    assert.equal(gate.projectGateStatusViewModel(a).visible, true);
+    const vm = authority.projectGateStatusUnderAuthority(a, 'behavioral');
+    assert.equal(vm.visible, false);
+  });
+
+  test('session-closed → overlay hidden even in TI', () => {
+    const a = gate.createEmptyRequirementsArtifact(null);
+    // Raw projector would show an open gate; authority must keep it inert.
+    assert.equal(gate.projectGateStatusViewModel(a).visible, true);
+    assert.equal(
+      authority.deriveSdSessionAuthority({ artifact: a, modeId: TI }).shouldArmGate,
+      false,
+    );
+    const vm = authority.projectGateStatusUnderAuthority(a, TI);
+    assert.equal(vm.visible, false);
   });
 });
