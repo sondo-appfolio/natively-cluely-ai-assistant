@@ -6,7 +6,10 @@
 import {
   type RequirementsArtifact,
   type SdPhase,
+  type GateStatusViewModel,
+  type ProjectGateStatusOptions,
   deriveSdPhase,
+  projectGateStatusViewModel,
 } from './sdRequirementsGate';
 
 export interface SdSessionAuthority {
@@ -39,4 +42,20 @@ export function deriveSdSessionAuthority(
   const sdPhase =
     sessionOpen && input.artifact ? deriveSdPhase(input.artifact) : undefined;
   return { sessionOpen, shouldArmGate, sdPhase, problemKey };
+}
+
+/**
+ * Overlay gate-status projection keyed on shouldArmGate (TI + session open),
+ * not per-turn answerType. Non-TI / session-closed → inert (hidden).
+ */
+export function projectGateStatusUnderAuthority(
+  artifact: RequirementsArtifact | null | undefined,
+  modeId: string | null | undefined,
+  opts: ProjectGateStatusOptions = {},
+): GateStatusViewModel {
+  const authority = deriveSdSessionAuthority({ artifact, modeId });
+  if (!authority.shouldArmGate) {
+    return projectGateStatusViewModel(null);
+  }
+  return projectGateStatusViewModel(artifact, opts);
 }

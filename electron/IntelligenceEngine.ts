@@ -23,6 +23,7 @@ import {
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
     deriveSdSessionAuthority,
+    projectGateStatusUnderAuthority,
     detectAdvanceSignal,
 } from './llm';
 import {
@@ -3454,14 +3455,11 @@ export class IntelligenceEngine extends EventEmitter {
     getSdRequirementsGateStatus(
         softRefused: boolean = false,
     ): import('./llm/sdRequirementsGate').GateStatusViewModel {
-        const { projectGateStatusViewModel } = require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+        // Ticket 04: publish/hide from shouldArmGate (TI + session open), not answerType.
         const artifact = this.session.getSdRequirementsArtifact?.() ?? null;
-        const vm = projectGateStatusViewModel(artifact, { softRefused });
-        // SPEC 17: strip only while Technical Interview + requirements gate.
-        if (vm.visible && this.getActiveModeId() !== 'technical-interview') {
-            return projectGateStatusViewModel(null);
-        }
-        return vm;
+        return projectGateStatusUnderAuthority(artifact, this.getActiveModeId(), {
+            softRefused,
+        });
     }
 
     /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */
