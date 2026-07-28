@@ -1962,24 +1962,23 @@ export class IntelligenceEngine extends EventEmitter {
             }
             trace.mark('response_completed', { chars: fullAnswer.length, coding: isCoding });
 
-            // SPEC 15 live miss: clarifier turns often plan as general_meeting_answer,
-            // so WTA never arms the stream strip. When T2 pins sdProblemKey and the
-            // session artifact is already post_requirements, strip drafts here —
-            // independent of answerType. Product path (no pin) is identity.
-            if (typeof options?.sdProblemKey === 'string' && options.sdProblemKey.trim()) {
-                try {
-                    const { applySimPostRequirementsAnswerStrip } =
-                        require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
-                    fullAnswer = applySimPostRequirementsAnswerStrip(fullAnswer, {
-                        sdProblemKey: options.sdProblemKey,
-                        artifact: this.session.getSdRequirementsArtifact?.() ?? null,
-                    });
-                } catch (stripErr: any) {
-                    console.warn(
-                        '[IntelligenceEngine] sim post_requirements answer strip skipped:',
-                        stripErr?.message || stripErr,
-                    );
-                }
+            // SPEC 15 live miss / SdSessionAuthority ticket 03: clarifier turns often
+            // plan as general_meeting_answer, so WTA never arms the stream strip.
+            // Strip late Requirements drafts when session is open (sticky artifact
+            // problemKey) and Requirements are done — independent of answerType.
+            // sdProblemKey pin remains an optional sim seed; soft nudge stays pin-only.
+            try {
+                const { applySimPostRequirementsAnswerStrip } =
+                    require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+                fullAnswer = applySimPostRequirementsAnswerStrip(fullAnswer, {
+                    sdProblemKey: options?.sdProblemKey,
+                    artifact: this.session.getSdRequirementsArtifact?.() ?? null,
+                });
+            } catch (stripErr: any) {
+                console.warn(
+                    '[IntelligenceEngine] post_requirements answer strip skipped:',
+                    stripErr?.message || stripErr,
+                );
             }
 
             // LIVE LATENCY FALLBACK: the deadline fired before any useful token.
