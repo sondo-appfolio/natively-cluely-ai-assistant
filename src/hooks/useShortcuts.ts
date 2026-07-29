@@ -33,6 +33,7 @@ export interface ShortcutConfig {
     resetCancel: string[];
     takeScreenshot: string[];
     selectiveScreenshot: string[];
+    toggleShortcuts: string[];
 }
 
 function buildDefaultShortcuts(): ShortcutConfig {
@@ -65,7 +66,8 @@ function buildDefaultShortcuts(): ShortcutConfig {
         capturePage: [mod, shift, 'Y'],
         resetCancel: [mod, 'R'],
         takeScreenshot: [mod, 'H'],
-        selectiveScreenshot: [mod, shift, 'H']
+        selectiveScreenshot: [mod, shift, 'H'],
+        toggleShortcuts: [mod, '/'],
     };
 }
 
@@ -86,9 +88,11 @@ export const DEFAULT_SHORTCUTS: ShortcutConfig = buildDefaultShortcuts();
 export const useShortcuts = () => {
     // Initialize state with platform-aware defaults
     const [shortcuts, setShortcuts] = useState<ShortcutConfig>(buildDefaultShortcuts);
+    const [keybinds, setKeybinds] = useState<Array<{ id: string; accelerator?: string | null }>>([]);
 
     // Map backend keybinds (array of objects) to frontend state (ShortcutConfig)
     const mapBackendToFrontend = useCallback((backendKeybinds: any[]) => {
+        setKeybinds(Array.isArray(backendKeybinds) ? backendKeybinds : []);
         setShortcuts(prev => {
             const newShortcuts: any = { ...prev };
 
@@ -127,6 +131,7 @@ export const useShortcuts = () => {
                 else if (kb.id === 'general:reset-cancel') newShortcuts.resetCancel = keys;
                 else if (kb.id === 'general:take-screenshot') newShortcuts.takeScreenshot = keys;
                 else if (kb.id === 'general:selective-screenshot') newShortcuts.selectiveScreenshot = keys;
+                else if (kb.id === 'general:toggle-shortcuts') newShortcuts.toggleShortcuts = keys;
             });
 
             return newShortcuts;
@@ -193,6 +198,7 @@ export const useShortcuts = () => {
             case 'resetCancel': backendId = 'general:reset-cancel'; break;
             case 'takeScreenshot': backendId = 'general:take-screenshot'; break;
             case 'selectiveScreenshot': backendId = 'general:selective-screenshot'; break;
+            case 'toggleShortcuts': backendId = 'general:toggle-shortcuts'; break;
             default: break;
         }
 
@@ -276,6 +282,7 @@ export const useShortcuts = () => {
 
     return {
         shortcuts,
+        keybinds,
         updateShortcut,
         resetShortcuts,
         isShortcutPressed
