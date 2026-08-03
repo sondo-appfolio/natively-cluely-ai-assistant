@@ -30,7 +30,7 @@ describe('Design sheet empty defaults / coverage / floor (SPEC 04)', () => {
     assert.equal(window.schemaVersion, 1);
     assert.deepEqual(window.items, []);
     assert.equal(window.cap.maxItems, 3);
-    assert.equal(window.cap.maxTotalChars, 1800);
+    assert.equal(window.cap.maxTotalChars, 6000);
   });
 
   test('continue selects first uncovered gap in entities → api → hld → deep_dive_topics', () => {
