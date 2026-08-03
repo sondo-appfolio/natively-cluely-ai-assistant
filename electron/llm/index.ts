@@ -161,6 +161,13 @@ export type {
     DeriveSdSessionAuthorityInput,
 } from "./sdSessionAuthority";
 export {
+    TI_SD_DURABLE_WINDOW_SECONDS,
+    TI_SD_DURABLE_MAX_TURNS,
+    DEFAULT_WTA_WINDOW_SECONDS,
+    DEFAULT_WTA_MAX_TURNS,
+    isTiSdWtaHotPath,
+} from "./tiSdTranscriptFeed";
+export {
     buildSdDeepDivePackSnapshot,
     buildDeepDiveCheckContext,
     applyCompletedSdAnswerToArtifact,
