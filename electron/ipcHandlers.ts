@@ -27,7 +27,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, resolveStructureValidationType, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, resolveStructureValidationType, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, applySpeakableSdIfNeeded, mayCompressToSpeakable, type ExplicitCodingContract, type AnswerType } from './llm';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
@@ -2942,6 +2942,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 fullResponse = cleaned;
                 finalText = cleaned;
               }
+              // Speakable SD (ticket 04): strip DSA scaffolds / impl fences after cleanup.
+              {
+                const sdPolished = applySpeakableSdIfNeeded(answerPlan.answerType, fullResponse);
+                if (sdPolished !== fullResponse && sdPolished.trim().length >= 10) {
+                  fullResponse = sdPolished;
+                  finalText = sdPolished;
+                  piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakable_sd_strip' });
+                }
+              }
               // HUMAN-LIKENESS final pass (task Phase 6): for a spoken candidate/sales
               // answer, deterministically swap surviving corporate idioms for plain
               // speech, drop "Based on your resume" / "the candidate" narration, and
@@ -2982,10 +2991,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // Visible scaffold in a DEFAULT-style answer (user didn't ask for
               // structure): compress to the speakable form. detectAnswerStyle
               // already ran inside planAnswer (answerStyle on the plan).
+              // Skip for system_design_answer — compress would telegram-cut DF prose.
               SCAFFOLD_LABEL_RE.lastIndex = 0;
               const hasVisibleScaffold = SCAFFOLD_LABEL_RE.test(fullResponse);
               const structureRequested = ['detailed', 'bullets', 'star', 'exam', 'notes'].includes(answerPlan.answerStyle as string);
-              if (hasVisibleScaffold && !structureRequested) {
+              if (hasVisibleScaffold && !structureRequested && mayCompressToSpeakable(answerPlan.answerType)) {
                 const speakable = compressToSpeakable(fullResponse);
                 if (speakable.length >= 40) {
                   fullResponse = speakable;
@@ -3017,7 +3027,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     repaired = varied;
                   }
                 }
-                if (repaired === fullResponse) {
+                if (repaired === fullResponse && mayCompressToSpeakable(answerPlan.answerType)) {
                   const speakable = compressToSpeakable(fullResponse);
                   if (speakable.length >= 40 && speakable !== fullResponse && !_manualDiversityGuard.check(speakable, answerPlan.answerType, message, { availableProjects }).repeated) {
                     repaired = speakable;

@@ -90,3 +90,28 @@ export function toSpeakableSd(answer: string): string {
     .replace(/\n+$/, '');
   return stripped;
 }
+
+/** True when WTA/polish should treat this turn as speakable system design. */
+export function isSystemDesignAnswerType(answerType: string | null | undefined): boolean {
+  return answerType === 'system_design_answer';
+}
+
+/**
+ * Apply {@link toSpeakableSd} for `system_design_answer`; identity for all other types.
+ * Wire from IE / ipcHandlers / OutputShapeNormalizer post-stream polish.
+ */
+export function applySpeakableSdIfNeeded(
+  answerType: string | null | undefined,
+  text: string,
+): string {
+  if (!isSystemDesignAnswerType(answerType)) return text;
+  return toSpeakableSd(text);
+}
+
+/**
+ * `compressToSpeakable` must not run on SD — it telegram-compresses tradeoff prose.
+ * Coding still uses its own path (callers typically skip polish entirely when coding).
+ */
+export function mayCompressToSpeakable(answerType: string | null | undefined): boolean {
+  return !isSystemDesignAnswerType(answerType);
+}

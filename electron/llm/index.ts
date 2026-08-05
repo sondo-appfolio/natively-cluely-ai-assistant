@@ -54,7 +54,12 @@ export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
 export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isProviderTransportError, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
-export { toSpeakableSd } from "./speakableSd";
+export {
+  toSpeakableSd,
+  applySpeakableSdIfNeeded,
+  mayCompressToSpeakable,
+  isSystemDesignAnswerType,
+} from "./speakableSd";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export {
     createEmptyRequirementsArtifact,

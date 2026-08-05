@@ -20,6 +20,7 @@ import {
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
     isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
+    applySpeakableSdIfNeeded, mayCompressToSpeakable,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
     deriveSdSessionAuthority,
@@ -2560,8 +2561,13 @@ export class IntelligenceEngine extends EventEmitter {
             if (!isCoding && finalWtaAnswer) {
                 try {
                     let cleaned = cleanAnswerArtifacts(finalWtaAnswer); // strips meta-preamble + schema stub + bullets
+                    // Speakable SD (ticket 04): strip DSA bleed; never compressToSpeakable on SD.
+                    cleaned = applySpeakableSdIfNeeded(answerPlan.answerType, cleaned);
                     SCAFFOLD_LABEL_RE.lastIndex = 0;
-                    if (SCAFFOLD_LABEL_RE.test(cleaned)) {
+                    if (
+                      SCAFFOLD_LABEL_RE.test(cleaned)
+                      && mayCompressToSpeakable(answerPlan.answerType)
+                    ) {
                         const speakable = compressToSpeakable(cleaned);
                         if (speakable.trim().length >= 40) cleaned = speakable;
                     }

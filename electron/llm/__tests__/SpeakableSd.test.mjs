@@ -12,7 +12,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/speakableSd.js');
-const { toSpeakableSd } = await import(pathToFileURL(modPath).href);
+const {
+  toSpeakableSd,
+  applySpeakableSdIfNeeded,
+  mayCompressToSpeakable,
+} = await import(pathToFileURL(modPath).href);
 
 describe('toSpeakableSd — DSA scaffolds + impl fences → speakable', () => {
   test('strips DSA headings and python fence, keeps ascii HLD', () => {
@@ -83,5 +87,21 @@ describe('toSpeakableSd — identity for empty / already-speakable', () => {
 
   test('runs without Electron runtime', () => {
     assert.equal(process.versions.electron, undefined);
+  });
+});
+
+describe('applySpeakableSdIfNeeded / mayCompressToSpeakable — WTA wire (ticket 04)', () => {
+  test('strips only for system_design_answer', () => {
+    const dirty = '## Approach\nWe clarify QPS first.\n```python\nx=1\n```';
+    assert.match(applySpeakableSdIfNeeded('system_design_answer', dirty), /clarify QPS/i);
+    assert.doesNotMatch(applySpeakableSdIfNeeded('system_design_answer', dirty), /```python/);
+    assert.equal(applySpeakableSdIfNeeded('coding_question_answer', dirty), dirty);
+    assert.equal(applySpeakableSdIfNeeded('behavioral_interview_answer', dirty), dirty);
+  });
+
+  test('mayCompressToSpeakable is false for system_design_answer only', () => {
+    assert.equal(mayCompressToSpeakable('system_design_answer'), false);
+    assert.equal(mayCompressToSpeakable('skills_answer'), true);
+    assert.equal(mayCompressToSpeakable('coding_question_answer'), true);
   });
 });
