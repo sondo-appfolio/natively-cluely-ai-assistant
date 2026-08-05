@@ -2562,16 +2562,22 @@ export class IntelligenceEngine extends EventEmitter {
                 try {
                     let cleaned = cleanAnswerArtifacts(finalWtaAnswer); // strips meta-preamble + schema stub + bullets
                     // Speakable SD (ticket 04): strip DSA bleed; never compressToSpeakable on SD.
-                    cleaned = applySpeakableSdIfNeeded(answerPlan.answerType, cleaned);
-                    SCAFFOLD_LABEL_RE.lastIndex = 0;
-                    if (
-                      SCAFFOLD_LABEL_RE.test(cleaned)
-                      && mayCompressToSpeakable(answerPlan.answerType)
-                    ) {
-                        const speakable = compressToSpeakable(cleaned);
-                        if (speakable.trim().length >= 40) cleaned = speakable;
+                    // Always accept the strip result when type is SD (even if empty) — do not
+                    // re-emit scaffolded dumps that shrunk below the generic polish floor.
+                    if (answerPlan.answerType === 'system_design_answer') {
+                        cleaned = applySpeakableSdIfNeeded(answerPlan.answerType, cleaned);
+                        if (cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
+                    } else {
+                        SCAFFOLD_LABEL_RE.lastIndex = 0;
+                        if (
+                          SCAFFOLD_LABEL_RE.test(cleaned)
+                          && mayCompressToSpeakable(answerPlan.answerType)
+                        ) {
+                            const speakable = compressToSpeakable(cleaned);
+                            if (speakable.trim().length >= 40) cleaned = speakable;
+                        }
+                        if (cleaned.trim().length >= 10 && cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
                     }
-                    if (cleaned.trim().length >= 10 && cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
                 } catch { /* cleanup never blocks the answer */ }
             }
             try {

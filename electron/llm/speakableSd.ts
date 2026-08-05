@@ -29,7 +29,12 @@ function looksLikeImplCode(body: string): boolean {
   }
   const lines = t.split('\n').filter((l) => l.trim().length > 0);
   if (lines.length === 0) return false;
-  const codey = lines.filter((l) => /[{};=]|=>|::/.test(l)).length;
+  // ASCII HLD boxes often use braces / ==== / arrows — not impl code.
+  const hldLike = lines.filter((l) =>
+    /(?:-->|->|<-|==+|--+|\|[^|]+\||\[[^\]]+\]|\{[^}]+\}|<[^>]+>)/.test(l),
+  ).length;
+  if (hldLike / lines.length >= 0.35) return false;
+  const codey = lines.filter((l) => /[{};=]|=>|::/.test(l) && !/(?:-->|->|==+|--+|\[[^\]]+\])/.test(l)).length;
   return codey / lines.length >= 0.4;
 }
 

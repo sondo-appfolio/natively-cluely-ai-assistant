@@ -2943,9 +2943,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                 finalText = cleaned;
               }
               // Speakable SD (ticket 04): strip DSA scaffolds / impl fences after cleanup.
+              // Always apply when types match — even if the result is short/empty — so
+              // scaffold-only dumps are not kept by the generic length>=10 polish floor.
               {
                 const sdPolished = applySpeakableSdIfNeeded(answerPlan.answerType, fullResponse);
-                if (sdPolished !== fullResponse && sdPolished.trim().length >= 10) {
+                if (sdPolished !== fullResponse) {
                   fullResponse = sdPolished;
                   finalText = sdPolished;
                   piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakable_sd_strip' });

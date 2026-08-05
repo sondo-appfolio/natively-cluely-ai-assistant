@@ -85,6 +85,29 @@ describe('toSpeakableSd — identity for empty / already-speakable', () => {
     assert.equal(toSpeakableSd(prose), prose);
   });
 
+  test('keeps untagged brace/arrow HLD boxes (not impl code)', () => {
+    const diagram = [
+      'Here is the HLD:',
+      '```',
+      '{Client} --> {API Gateway} --> {Shortener}',
+      '                  |',
+      '                  v',
+      '               {Redis}',
+      '```',
+    ].join('\n');
+    const out = toSpeakableSd(diagram);
+    assert.match(out, /\{Client\}/);
+    assert.match(out, /\{Redis\}/);
+  });
+
+  test('scaffold-only dump can strip to empty (wire must not restore dirty)', () => {
+    const onlyScaffold = '## Approach\n## Code\n```python\nx=1\n```\n## Complexity';
+    const out = toSpeakableSd(onlyScaffold);
+    assert.doesNotMatch(out, /## Approach/);
+    assert.doesNotMatch(out, /```python/);
+    assert.equal(applySpeakableSdIfNeeded('system_design_answer', onlyScaffold), out);
+  });
+
   test('runs without Electron runtime', () => {
     assert.equal(process.versions.electron, undefined);
   });
