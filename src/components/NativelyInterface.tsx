@@ -254,6 +254,7 @@ import {
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
+import { projectLiveTranscriptChunk } from '../lib/liveTranscriptProjection.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -1019,6 +1020,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     captureShouldRun: boolean;
     reason: string;
   }>({ state: 'idle', captureShouldRun: false, reason: 'idle' });
+  // always-on-live-transcript: ref so transcript IPC handler sees armed state
+  // without re-subscribing (same stale-closure pattern as isRecordingRef).
+  const listenArmedRef = useRef(false);
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
@@ -2706,6 +2710,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       unsub?.();
     };
   }, []);
+
+  useEffect(() => {
+    listenArmedRef.current = listenTransport.state === 'armed';
+  }, [listenTransport.state]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onOverlayUiAction?.((action) => {
@@ -4472,12 +4480,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
 
-    // Real-time Transcripts
+    // Real-time Transcripts — always-on-live-transcript while listenArmed;
+    // Ask/submit still owns voice-input capture via isManualRecording.
     cleanups.push(
       window.electronAPI.onNativeAudioTranscript((transcript) => {
-        // When Answer button is active, capture USER transcripts for voice input
-        // Use ref to avoid stale closure issue
-        if (isRecordingRef.current && transcript.speaker === 'user') {
+        const route = projectLiveTranscriptChunk({
+          speaker: transcript.speaker,
+          listenArmed: listenArmedRef.current,
+          isManualRecording: isRecordingRef.current,
+        });
+
+        // Ask/submit voice buffer (Answers chip) — independent of rolling projection.
+        if (route.captureForAsk && transcript.speaker === 'user') {
           if (transcript.final) {
             // Accumulate final transcripts, collapsing STT overlap/re-transcription
             // races (RC5, docs/context-rebuild/03_LIVE_REPRO_FINDINGS.md item 4)
@@ -4494,21 +4508,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             setManualTranscript(transcript.text);
             manualTranscriptRef.current = transcript.text;
           }
-          return; // Don't add to messages while recording
+          if (!route.projectToRolling) {
+            return;
+          }
         }
 
-        // Ignore user mic transcripts when not recording
-        // Only interviewer (system audio) transcripts should appear in chat
-        if (transcript.speaker === 'user') {
-          return; // Skip user mic input - only relevant when Answer button is active
+        if (!route.projectToRolling) {
+          return;
         }
 
-        // Only show interviewer (system audio) transcripts in rolling bar
-        if (transcript.speaker !== 'interviewer') {
-          return; // Safety check for any other speaker types
-        }
-
-        // Route to rolling transcript bar — partials debounced; finals commit immediately.
+        // Rolling bar: interviewer always; user-mic when transport is armed.
         if (!transcript.final) {
           if (!interviewerSpeakingRef.current) {
             interviewerSpeakingRef.current = true;
