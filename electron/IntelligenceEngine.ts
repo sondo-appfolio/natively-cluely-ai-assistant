@@ -26,6 +26,9 @@ import {
     deriveSdSessionAuthority,
     projectGateStatusUnderAuthority,
     detectAdvanceSignal,
+    isTiSdWtaHotPath,
+    TI_SD_DURABLE_WINDOW_SECONDS,
+    TI_SD_DURABLE_MAX_TURNS,
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -2092,6 +2095,41 @@ export class IntelligenceEngine extends EventEmitter {
                 trace.mark('repair_used', { reason: 'sd_requirements_soft_refuse' });
                 this.setMode('idle');
                 return refuse;
+            }
+
+            // TI SD hot path (ticket 03, win-first-context-retention): Requirements
+            // and sticky-session clarifier turns must hold context for a full
+            // 1-hour meeting, not the 180s ring loaded above. Re-source the WTA
+            // transcript feed from the durable store (bounded to 3600s, still
+            // sparsified — never the unbounded fullTranscript) and re-inject the
+            // latest interim the same way the 180s path does above. Post-gate SD
+            // continuity (design sheet / recentSdAnswers) is unaffected — this only
+            // swaps the raw transcript feed. Non-TI / non-SD turns are untouched.
+            if (sdPrepared.isTiSdHotPath) {
+                const durableItems = this.session.getDurableContext(TI_SD_DURABLE_WINDOW_SECONDS);
+                const durableTurns = durableItems.map(item => ({
+                    role: item.role,
+                    text: item.text,
+                    timestamp: item.timestamp,
+                }));
+                const lastDurableItem = durableTurns[durableTurns.length - 1];
+                const isInterimDuplicate = Boolean(lastInterim) && Boolean(lastDurableItem) &&
+                    lastDurableItem.role === 'interviewer' &&
+                    (lastDurableItem.text === lastInterim!.text || Math.abs(lastDurableItem.timestamp - lastInterim!.timestamp) < 1000);
+                if (lastInterim && lastInterim.text.trim().length > 0 && !isInterimDuplicate) {
+                    durableTurns.push({
+                        role: 'interviewer',
+                        text: lastInterim.text,
+                        timestamp: lastInterim.timestamp,
+                    });
+                }
+                preparedTranscript = prepareTranscriptForWhatToAnswer(durableTurns, TI_SD_DURABLE_MAX_TURNS);
+                trace.mark('transcript_window_loaded', {
+                    turns: durableTurns.length,
+                    source: 'ti_sd_durable_3600',
+                    windowSeconds: TI_SD_DURABLE_WINDOW_SECONDS,
+                    maxTurns: TI_SD_DURABLE_MAX_TURNS,
+                });
             }
 
             trace.mark('answer_type_selected', {
@@ -5056,7 +5094,7 @@ export class IntelligenceEngine extends EventEmitter {
         problemQuestion: string,
         screenContext?: ScreenContext | null,
         gateOpts?: { uiAdvance?: boolean; sdProblemKeyPinned?: boolean },
-    ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
+    ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null; isTiSdHotPath: boolean } {
         const modeId = this.getActiveModeId();
         let priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
         const pinned =
@@ -5073,9 +5111,14 @@ export class IntelligenceEngine extends EventEmitter {
         }
         const authority = deriveSdSessionAuthority({ artifact: priorArtifact, modeId });
         const isSdAnswer = answerPlan.answerType === 'system_design_answer';
+        // Ticket 03 (win-first-context-retention): same authority this function
+        // already uses to decide whether SD prepare governs the turn at all is
+        // the single source of truth for whether the live WTA transcript feed
+        // should read the 1-hour durable window (see tiSdTranscriptFeed.ts).
+        const isTiSdHotPath = isTiSdWtaHotPath(answerPlan.answerType, authority.shouldArmGate);
         if (!isSdAnswer && !authority.shouldArmGate) {
             this.publishSdRequirementsGateStatus(false);
-            return { answerPlan, softRefuseSpoken: null };
+            return { answerPlan, softRefuseSpoken: null, isTiSdHotPath };
         }
         try {
             const ctx = this.session.getContextWithInterim?.(180) || this.session.getContext?.(180) || [];
@@ -5140,10 +5183,11 @@ export class IntelligenceEngine extends EventEmitter {
                     ...(gateOpts?.sdProblemKeyPinned ? { sdSimPinned: true } : {}),
                 },
                 softRefuseSpoken: prepared.softRefuseSpoken,
+                isTiSdHotPath,
             };
         } catch (err: any) {
             console.warn('[IntelligenceEngine] SD Requirements gate skipped (non-fatal):', err?.message || err);
-            return { answerPlan, softRefuseSpoken: null };
+            return { answerPlan, softRefuseSpoken: null, isTiSdHotPath };
         }
     }
 

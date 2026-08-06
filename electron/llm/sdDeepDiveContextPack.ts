@@ -15,14 +15,31 @@ import type {
 export const SD_CONTEXT_PACK_HARD_CAP_TOKENS = 12_000;
 
 /**
- * WTA inject budget: PromptAssembler `retrievedModeContext` defaults to 1800 tokens.
- * Cap the pack under that so pack-builder eviction (floor-preserving) runs instead
- * of blind assembler truncation from the end of the combined mode block.
+ * WTA inject budget: the maxTotalTokens this builder is given on the live
+ * post-gate WTA path (electron/llm/WhatToAnswerLLM.ts). Must comfortably fit
+ * a realistic, non-overflow floor — design sheet (up to COMMITTED_MAX=40
+ * commitments, sdDesignSheetExtractor.ts), latest interviewer utterance,
+ * recentSdAnswers (capped at SD_RECENT_MAX_TOTAL_CHARS=6000 chars ≈ 1500
+ * tokens), and up to SD_LESSON_MAX_CHUNKS=5 LESSON chunks — WITHOUT
+ * triggering SPEC 06 eviction of recentSdAnswers/LESSON on a normal turn.
+ *
+ * Ticket 02 (win-first-context-retention): the prior 1_600 value squeezed
+ * that floor on realistic payloads well below the hard cap, forcing
+ * needless recent/LESSON truncation. Raised so the floor fits; still well
+ * below SD_CONTEXT_PACK_HARD_CAP_TOKENS so an oversized adaptive slice (no
+ * fixed cap) still triggers adaptive-drop-first eviction under genuine
+ * overflow.
  */
-export const SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS = 1_600;
+export const SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS = 6_000;
 
-/** Assembler block budget when the retrieved block carries a post-gate SD pack. */
-export const SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS = 4_000;
+/**
+ * Assembler block budget when the retrieved block carries a post-gate SD
+ * pack. Kept above SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS (plus headroom for
+ * any generic mode-retrieval content prepended ahead of the pack) so the
+ * assembler's own blind truncation never re-squeezes what the pack builder
+ * already fit under budget.
+ */
+export const SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS = 8_000;
 
 /** Locked recent-window caps for the pack floor (SPEC 06 grilling lock). */
 export const SD_RECENT_MAX_ITEMS = 3;

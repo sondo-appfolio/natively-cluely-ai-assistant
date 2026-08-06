@@ -323,4 +323,106 @@ describe('SD context pack hard cap & excludes (SPEC 06)', () => {
     assert.match(result.pack, /<design_sheet>/);
     assert.match(result.pack, /<latest_interviewer>/);
   });
+
+  // Ticket 02 — raise SD pack WTA inject so floor fits.
+  //
+  // The old ~1600-token inject squeeze forced eviction of recentSdAnswers and
+  // LESSON chunks on realistic, non-adaptive floor payloads — even though
+  // those payloads never approach the ~12k hard ceiling. The floor (sheet +
+  // latest interviewer + recentSdAnswers + LESSON-if-present, per PRD) must
+  // survive the exact budget wired on the WTA post-gate path with no
+  // adaptive slice competing for room.
+  test('realistic floor-only pack (sheet+utterance+recent+LESSON, no adaptive) is not truncated by WTA inject budget', () => {
+    const sheet = makeSheet({
+      committed: Array.from({ length: 18 }, (_, i) => ({
+        id: `c${i}`,
+        section: 'entities',
+        text: `Requirement ${i}: URLs shorten via Base62 with a 7-char code and TTL of 30 days.`,
+        fillSource: 'speech',
+        status: 'committed',
+        updatedAt: i,
+      })),
+    });
+    const lessonChunks = [
+      { text: '## Understanding the Problem\n' + 'Clarify scope, scale, and read/write ratio. '.repeat(15) },
+      { text: '## Potential Deep Dives\n' + 'Discuss hot-key sharding and cache invalidation. '.repeat(15) },
+      { text: '## Non-Functional Requirements\n' + 'Target 99.9% availability with low read latency. '.repeat(15) },
+      { text: '## Deep Dives\n' + 'Explore consistent hashing across shards. '.repeat(15) },
+      { text: '## Scalability\n' + 'Plan for 100M DAU with read-heavy traffic. '.repeat(15) },
+    ];
+    const recentSdAnswers = [
+      { answerId: 'r1', capturedAt: 1, text: 'We store the mapping in a key-value store keyed by short code. '.repeat(20) },
+      { answerId: 'r2', capturedAt: 2, text: 'Writes go through a coordinator that reserves a Base62 code. '.repeat(20) },
+      { answerId: 'r3', capturedAt: 3, text: 'Reads are served from a cache in front of the KV store. '.repeat(20) },
+    ];
+
+    const result = packMod.buildSdDeepDiveContextPack({
+      sheet,
+      latestInterviewer: 'How would you handle a sudden spike of hot keys during a viral link?',
+      lessonChunks,
+      recentSdAnswers,
+      budgets: { maxTotalTokens: packMod.SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS },
+    });
+
+    assert.equal(result.meta.truncatedRecent, false, 'recentSdAnswers floor must not be truncated by inject squeeze');
+    assert.equal(result.meta.truncatedLesson, false, 'LESSON floor must not be truncated by inject squeeze');
+    assert.equal(result.meta.recentItemCount, 3, 'all recent answers survive');
+    assert.equal(result.meta.lessonChunkCount, 5, 'all LESSON chunks survive');
+    assert.ok(result.blocks.designSheet, 'sheet floor must survive');
+    assert.ok(result.blocks.latestInterviewer, 'utterance floor must survive');
+    assert.match(result.pack, /hot-key sharding/i);
+    assert.match(result.pack, /Base62 code/);
+  });
+
+  test('adaptive still drops before floor items when a floor-heavy pack overflows the raised WTA inject budget', () => {
+    const sheet = makeSheet({
+      committed: Array.from({ length: 18 }, (_, i) => ({
+        id: `c${i}`,
+        section: 'entities',
+        text: `Requirement ${i}: URLs shorten via Base62 with a 7-char code and TTL of 30 days.`,
+        fillSource: 'speech',
+        status: 'committed',
+        updatedAt: i,
+      })),
+    });
+    const lessonChunks = [
+      { text: '## Understanding the Problem\n' + 'Clarify scope, scale, and read/write ratio. '.repeat(15) },
+      { text: '## Potential Deep Dives\n' + 'Discuss hot-key sharding and cache invalidation. '.repeat(15) },
+      { text: '## Non-Functional Requirements\n' + 'Target 99.9% availability with low read latency. '.repeat(15) },
+      { text: '## Deep Dives\n' + 'Explore consistent hashing across shards. '.repeat(15) },
+      { text: '## Scalability\n' + 'Plan for 100M DAU with read-heavy traffic. '.repeat(15) },
+    ];
+    const recentSdAnswers = [
+      { answerId: 'r1', capturedAt: 1, text: 'We store the mapping in a key-value store keyed by short code. '.repeat(20) },
+      { answerId: 'r2', capturedAt: 2, text: 'Writes go through a coordinator that reserves a Base62 code. '.repeat(20) },
+      { answerId: 'r3', capturedAt: 3, text: 'Reads are served from a cache in front of the KV store. '.repeat(20) },
+    ];
+
+    const result = packMod.buildSdDeepDiveContextPack({
+      sheet,
+      latestInterviewer: 'How would you handle a sudden spike of hot keys during a viral link?',
+      lessonChunks,
+      recentSdAnswers,
+      // Adaptive slice alone is large enough to push a realistic floor-heavy
+      // pack over the raised inject budget — adaptive must be the thing that
+      // gives, not the floor.
+      adaptiveSlice: 'ADAPTIVE_PROBE_MARKER ' + 'A'.repeat(40_000),
+      budgets: { maxTotalTokens: packMod.SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS },
+    });
+
+    assert.equal(result.meta.droppedAdaptive, true, 'oversized adaptive slice must still be dropped under overflow');
+    assert.doesNotMatch(result.pack, /ADAPTIVE_PROBE_MARKER/);
+    assert.equal(result.meta.recentItemCount, 3, 'recent floor unaffected by adaptive overflow');
+    assert.equal(result.meta.lessonChunkCount, 5, 'LESSON floor unaffected by adaptive overflow');
+    assert.ok(result.blocks.designSheet);
+    assert.ok(result.blocks.latestInterviewer);
+  });
+
+  test('raised WTA inject budget stays comfortably under the hard ~12k pack ceiling', () => {
+    assert.ok(
+      packMod.SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS < packMod.SD_CONTEXT_PACK_HARD_CAP_TOKENS,
+      'inject budget must remain below the hard cap so adaptive overflow protection still exercises',
+    );
+    assert.equal(packMod.SD_CONTEXT_PACK_HARD_CAP_TOKENS, 12_000, 'hard pack ceiling stays ~12k');
+  });
 });

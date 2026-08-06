@@ -78,7 +78,7 @@ export interface RecentSdAnswerItem {
 export interface RecentSdAnswers {
   problemKey: string | null;
   items: RecentSdAnswerItem[];
-  cap: { maxItems: 3; maxTotalChars: 1800 };
+  cap: { maxItems: 3; maxTotalChars: 6000 };
   updatedAt: number;
   schemaVersion: 1;
 }
@@ -123,7 +123,7 @@ export function createEmptyRecentSdAnswers(
   return {
     problemKey,
     items: [],
-    cap: { maxItems: 3, maxTotalChars: 1800 },
+    cap: { maxItems: 3, maxTotalChars: 6000 },
     updatedAt: now,
     schemaVersion: 1,
   };
