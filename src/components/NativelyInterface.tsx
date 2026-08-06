@@ -262,7 +262,10 @@ import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { planAskSubmitAction, askSubmitTouchesListenTransport } from '../lib/askSubmit.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
-import { projectLiveTranscriptChunk } from '../lib/liveTranscriptProjection.mjs';
+import {
+  projectLiveTranscriptChunk,
+  shouldShowLiveTranscriptSurface,
+} from '../lib/liveTranscriptProjection.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -8136,11 +8139,14 @@ Provide only the answer, nothing else.`;
                 </div>
               ) : null}
 
-              {/* Rolling Transcript Bar — live transcript + on-demand diagnostics
-                  for hard failures. Reconnecting/awaiting-audio status is owned by
-                  the top status pill, so the bar no longer mounts for those (which
-                  also avoids an empty bar / duplicated status text). */}
-              {showTranscript && rollingTranscript ? (
+              {/* Rolling Transcript Bar — always-on while listen is armed (even
+                  before the first STT token; RollingTranscript shows "Listening…").
+                  Preference off still hides the surface. */}
+              {shouldShowLiveTranscriptSurface({
+                showTranscriptPreference: showTranscript,
+                listenArmed: listenTransport.state === 'armed',
+                hasRollingText: !!rollingTranscript,
+              }) ? (
                 <RollingTranscript
                   text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
@@ -8478,7 +8484,15 @@ Provide only the answer, nothing else.`;
                   )}
                 </AnimatePresence>
                 <div
-                  className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                  className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${
+                    shouldShowLiveTranscriptSurface({
+                      showTranscriptPreference: showTranscript,
+                      listenArmed: listenTransport.state === 'armed',
+                      hasRollingText: !!rollingTranscript,
+                    })
+                      ? 'pt-1'
+                      : 'pt-3'
+                  }`}
                 >
                 <button
                   onClick={handleWhatToSay}

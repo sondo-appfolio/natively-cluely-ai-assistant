@@ -33,7 +33,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
     }, [text, showTranscriptText]);
 
     return (
-        <div className="relative w-full">
+        <div className="relative w-full" data-testid="live-transcript-surface">
             <div
                 className="relative w-full overflow-hidden"
                 style={{
