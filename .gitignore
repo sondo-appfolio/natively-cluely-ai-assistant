@@ -479,6 +479,8 @@ docs/*
 !docs/interviewman-listen/**
 !docs/speakable-sd/
 !docs/speakable-sd/**
+!docs/standalone-ios/
+!docs/standalone-ios/**
 benchmark-results/
 
 
