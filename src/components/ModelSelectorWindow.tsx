@@ -154,16 +154,55 @@ const ModelSelectorWindow = () => {
                     models.push({ id: 'natively', name: 'Natively API', type: 'cloud', provider: 'natively' });
                 }
 
-                // Cloud Models — standard models + unique preferred models
+                // Cloud Models — gemini-catalog: presets ∪ preferred ∪ fetched ∪
+                // allow-listed orphans (Settings effectiveModels semantics).
+                const disabledProviders: string[] = creds?.disabledProviders || [];
+                const cloudEnabledModels: Record<string, string[]> = creds?.cloudEnabledModels || {};
+                let cloudFetchedModels: Record<string, { id: string; label: string }[]> =
+                    creds?.cloudFetchedModels || {};
+
+                // Refresh Gemini list-models when a BYOK key is present (uses stored key).
+                if (creds?.hasGeminiKey && !disabledProviders.includes('gemini')) {
+                    try {
+                        const fetched = await window.electronAPI?.fetchProviderModels?.('gemini', '');
+                        if (fetched?.success && Array.isArray(fetched.models) && fetched.models.length > 0) {
+                            cloudFetchedModels = {
+                                ...cloudFetchedModels,
+                                gemini: fetched.models.map((m: { id: string; label?: string }) => ({
+                                    id: m.id,
+                                    label: m.label || m.id,
+                                })),
+                            };
+                        }
+                    } catch {
+                        /* offline / rate-limit — fall back to cached catalog */
+                    }
+                }
+
+                const isProviderEnabled = (prov: string) => !disabledProviders.includes(prov);
+                const isModelEnabled = (prov: string, modelId: string) => {
+                    const allowList = cloudEnabledModels[prov] || [];
+                    return allowList.length === 0 || allowList.includes(modelId);
+                };
+
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
-                    });
+                    if (!isProviderEnabled(prov)) continue;
+                    const seen = new Set<string>();
+                    const pushCloud = (id: string, name: string) => {
+                        if (!id || seen.has(id) || !isModelEnabled(prov, id)) return;
+                        seen.add(id);
+                        models.push({ id, name, type: 'cloud', provider: prov });
+                    };
+                    cfg.ids.forEach((id, i) => pushCloud(id, cfg.names[i] || id));
+                    (cloudFetchedModels[prov] || []).forEach((m) =>
+                        pushCloud(m.id, m.label || m.id),
+                    );
+                    (cloudEnabledModels[prov] || []).forEach((id) =>
+                        pushCloud(id, prettifyModelId(id)),
+                    );
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
-                        models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
-                    }
+                    if (pm) pushCloud(pm, prettifyModelId(pm));
                 }
 
                 // Custom Providers

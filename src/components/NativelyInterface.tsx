@@ -4679,9 +4679,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const emittedAt = (data as { emittedAt?: number }).emittedAt;
         const STALE_ANSWER_MS = 30_000;
         const isStale = typeof emittedAt === 'number' && Date.now() - emittedAt > STALE_ANSWER_MS;
+        const observerTag =
+          (data as { triggerSource?: string }).triggerSource === 'human-observer-suggestion'
+            ? '(Observer suggestion)\n\n'
+            : '';
         const answerText = isStale && data.question
-          ? `(Late answer to: "${data.question}")\n\n${data.answer}`
-          : data.answer;
+          ? `${observerTag}(Late answer to: "${data.question}")\n\n${data.answer}`
+          : `${observerTag}${data.answer}`;
         setIsProcessing(false);
         pinAnswerPanel();
         finalizeStreamingByIntent('what_to_answer', answerText);
@@ -6015,20 +6019,42 @@ Provide only the answer, nothing else.`;
     manualSubmitInFlightRef.current = true;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
 
+    // human-observer-suggestion: typed overlay input is control-plane WTA
+    // (not gemini-chat-stream). /nudge → promptInstruction only.
+    const nudgeMatch = userText.match(/^\/nudge(?:\s+(.+))?$/i);
+    const isNudge = Boolean(nudgeMatch);
+    const nudgeDirective = (nudgeMatch?.[1] || '').trim();
+    if (isNudge && !nudgeDirective) {
+      manualSubmitInFlightRef.current = false;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          text: 'Usage: /nudge <directive> — coaches the next suggestion without replacing the live interviewer question.',
+        },
+      ]);
+      setInputValue('');
+      return;
+    }
+
+    if (!tryBeginOverlayAction('what_to_say')) {
+      manualSubmitInFlightRef.current = false;
+      setMessages((prev) => [
+        ...prev,
+        { id: genMessageId(), role: 'system', text: 'Still finishing the previous answer — one moment…' },
+      ]);
+      return;
+    }
+
     const currentAttachments = attachedContext;
-    const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     // Clear inputs immediately
     setInputValue('');
     setAttachedContext([]);
 
     // Seal any in-flight streaming rows from a previous turn before we
-    // append the new user message + placeholder. Without this, the rAF
-    // token coalescer (queueToken) can append tokens of the next stream
-    // onto the prior row whenever the streaming intent matches —
-    // surfacing as the next answer starting mid-sentence with leftover
-    // text from the previous turn. Also flush any tokens still pending
-    // in the rAF buffer so they land on the prior row, not the new one.
+    // append the new user message + placeholder.
     flushToken();
     tokenBufRef.current.intent = '';
     tokenBufRef.current.text = '';
@@ -6042,14 +6068,19 @@ Provide only the answer, nothing else.`;
         : prev,
     );
 
+    const displayText = isNudge
+      ? `Observer nudge: ${nudgeDirective}`
+      : `Observer suggestion: ${userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : '')}`;
+
     setMessages((prev) => [
       ...prev,
       {
         id: genMessageId(),
         role: 'user',
-        text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
+        text: displayText,
         hasScreenshot: currentAttachments.length > 0,
         screenshotPreview: currentAttachments[0]?.preview,
+        isQuickActionLabel: true,
       },
     ]);
 
@@ -6058,80 +6089,65 @@ Provide only the answer, nothing else.`;
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
 
-    // A previous turn's RAG answer may still be deferred-draining (see
-    // forceFinalizeStaleRagStream's declaration) — force it to its final
-    // state before this new placeholder can become "the last message".
     forceFinalizeStaleRagStream();
-    // Add placeholder for streaming response — wire queueToken to this row so
-    // the first gemini-stream-token does not spawn a second streaming bubble.
-    const placeholderId = genMessageId();
-    streamingMsgIdRef.current = placeholderId;
-    streamingIntentRef.current = 'chat';
-    streamingTextRef.current = '';
-    streamingNodeRef.current = null;
-    streamingRenderModeRef.current = 'imperative';
-    if (streamingRafRef.current !== null) {
-      cancelAnimationFrame(streamingRafRef.current);
-      streamingRafRef.current = null;
-    }
-    if (streamingCodeRafRef.current !== null) {
-      cancelAnimationFrame(streamingCodeRafRef.current);
-      streamingCodeRafRef.current = null;
-    }
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: placeholderId,
-        role: 'system',
-        text: '',
-        intent: 'chat',
-        isStreaming: true,
-      },
-    ]);
+    // WTA stream lands on what_to_answer (suggested_answer_token), not gemini chat.
+    prepareIntelligenceStreamPlaceholder('what_to_answer');
 
     setIsExpanded(true);
     setIsProcessing(true);
     pinAnswerPanel();
+    analytics.trackCommandExecuted('human_observer_suggestion');
 
     try {
-      // JIT RAG pre-flight: try to use indexed meeting context first
-      if (currentAttachments.length === 0) {
-        const ragResult = await window.electronAPI.ragQueryLive?.(userText || '');
-        if (ragResult?.success) {
-          // JIT RAG handled it — response streamed via rag:stream-chunk events
-          return;
-        }
-      }
-
-      // Pass imagePath if attached, AND conversation context
       requestStartTimeRef.current = Date.now();
-      await window.electronAPI.streamGeminiChat(
-        userText || 'Analyze this screenshot',
+      const result = await window.electronAPI.generateWhatToSay(
+        isNudge ? undefined : userText || undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        conversationContextForSubmit, // Pass freshly-derived context so "answer this" works
+        {
+          triggerSource: 'human-observer-suggestion',
+          ...(isNudge ? { promptInstruction: nudgeDirective } : {}),
+        },
       );
-    } catch (err) {
-      setIsProcessing(false);
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.isStreaming && last.text === '') {
-          // remove the empty placeholder
-          return prev.slice(0, -1).concat({
-            id: genMessageId(),
-            role: 'system',
-            text: `❌ Error starting stream: ${err}`,
-          });
+      setScreenContextStatus(result.screenContextStatus || 'not_available');
+      setLatestUsedImageInput(Boolean(result.usedImageInput));
+      setLatestVisionProviderUsed(result.visionProviderUsed);
+      setLatestVisionModelUsed(result.visionModelUsed);
+      setLatestVisionFailureReason(result.visionFailureReason);
+      if (result.answer == null) {
+        const feedback =
+          result.error ??
+          'Could not generate an answer yet. Wait a few seconds after speech and try again.';
+        if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
+        streamingNodeRef.current = null;
+        streamingTextRef.current = '';
+        streamingMsgIdRef.current = null;
+        streamingIntentRef.current = null;
+        streamingRenderModeRef.current = 'imperative';
+        eagerCodeExpansionHoldRef.current = false;
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
         }
-        return [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'system',
-            text: `❌ Error: ${err}`,
-          },
-        ];
-      });
+        if (streamingCodeRafRef.current !== null) {
+          cancelAnimationFrame(streamingCodeRafRef.current);
+          streamingCodeRafRef.current = null;
+        }
+        setMessages((prev) => applyWhatToAnswerNullFeedbackMessages(prev, feedback));
+        pinAnswerPanel();
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          text: `❌ Error: ${err}`,
+        },
+      ]);
+      pinAnswerPanel();
     } finally {
+      endOverlayAction('what_to_say');
+      setIsProcessing(false);
       manualSubmitInFlightRef.current = false;
     }
   };

@@ -10,16 +10,16 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, classifySdIntention, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
-    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
-    isProviderTransportError,
-    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
+    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
+    isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, checkAnswerRelevance,
+    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, AnswerDiversityGuard,
     applySpeakableSdIfNeeded, mayCompressToSpeakable,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
@@ -214,6 +214,10 @@ export class IntelligenceEngine extends EventEmitter {
 
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
+    /** Provenance for the most recent WTA request (control-plane observer vs hotkey). */
+    private lastWtaTriggerSource: 'human-observer-suggestion' | undefined = undefined;
+    /** Generation-scoped observer provenance — avoids tagging later code-hint/brainstorm emits. */
+    private wtaTriggerSourceByGeneration = new Map<number, 'human-observer-suggestion'>();
     private readonly triggerCooldown: number = 3000; // 3 seconds
 
     // Speculative inference: start LLM on high-confidence interviewer partials
@@ -815,7 +819,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; sdRequirementsUiAdvance?: boolean; /** Sim-only: pin SD problemKey so clarifiers don't reset designSheet/recentSdAnswers. */ sdProblemKey?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; sdRequirementsUiAdvance?: boolean; /** Sim-only: pin SD problemKey so clarifiers don't reset designSheet/recentSdAnswers. */ sdProblemKey?: string; /** Control-plane typed observer / REPL — not SessionTracker speech. */ triggerSource?: 'human-observer-suggestion' }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -826,6 +830,18 @@ export class IntelligenceEngine extends EventEmitter {
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
         const forceFresh = options?.forceFresh === true;
+        this.lastWtaTriggerSource =
+            options?.triggerSource === 'human-observer-suggestion'
+                ? 'human-observer-suggestion'
+                : undefined;
+        if (this.lastWtaTriggerSource) {
+            try {
+                piTelemetry.emit('wta_trigger_source', {
+                    surface: 'what_to_answer',
+                    triggerSource: this.lastWtaTriggerSource,
+                });
+            } catch { /* non-fatal */ }
+        }
 
         // Manual user action (button press / hotkey) MUST start from a clean
         // speculativeText slate. The previous answer arriving on a manual press
@@ -877,6 +893,18 @@ export class IntelligenceEngine extends EventEmitter {
         // resumes after this point, it can only observe itself as superseded; it
         // must never mint a newer id and overtake this request.
         const generationId = ++this.currentGenerationId;
+        if (this.lastWtaTriggerSource) {
+            this.wtaTriggerSourceByGeneration.set(generationId, this.lastWtaTriggerSource);
+        } else {
+            this.wtaTriggerSourceByGeneration.delete(generationId);
+        }
+        // Bound map growth: keep only recent generation ids.
+        if (this.wtaTriggerSourceByGeneration.size > 8) {
+            const oldest = [...this.wtaTriggerSourceByGeneration.keys()].sort((a, b) => a - b);
+            for (const id of oldest.slice(0, oldest.length - 8)) {
+                this.wtaTriggerSourceByGeneration.delete(id);
+            }
+        }
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
             || this.currentGenerationId !== generationId
@@ -1978,6 +2006,31 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
             trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
+
+            // Frozen source authority for this turn. Must be resolved after intent
+            // and profile availability are known, and before the Context OS blocks
+            // below read sourceAuthority / turnSourceDecision / requiredEvidenceKinds
+            // — they may narrow context but must never recompute the decision.
+            // The SD-gated answerPlan below stays the execution plan (ADR 0005).
+            const canonicalTurn = resolveCanonicalTurn({
+                answerInput: {
+                    question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                    source: question ? 'manual_input' : 'what_to_answer',
+                    speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
+                    extractedQuestion,
+                    intentResult,
+                    hasCandidateProfile: Boolean(candidateProfile),
+                    activeMode: snapshotModeInfo,
+                },
+                sourceContract: snapshotSourceContract,
+                explicitRequests: (() => {
+                    try {
+                        const { resolveExplicitSourceRequests } = require('./intelligence/context-os/explicitSourceSwitch');
+                        return resolveExplicitSourceRequests(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '');
+                    } catch { return []; }
+                })(),
+                availability: snapshotSourceAvailability,
+            });
 
             // ADR 0005: sticky SD session (open problemKey) promotes answerType
             // before template/speakable strip — read prior artifact, not post-prepare.
@@ -5112,6 +5165,19 @@ export class IntelligenceEngine extends EventEmitter {
         return projectGateStatusUnderAuthority(artifact, this.getActiveModeId(), {
             softRefused,
         });
+    }
+
+    /** human-observer-suggestion provenance for the most recent WTA request. */
+    getLastWtaTriggerSource(): 'human-observer-suggestion' | undefined {
+        return this.lastWtaTriggerSource;
+    }
+
+    /** Generation-scoped observer provenance for suggested_answer payload tagging. */
+    getWtaTriggerSourceForGeneration(
+        generationId?: number,
+    ): 'human-observer-suggestion' | undefined {
+        if (typeof generationId !== 'number') return undefined;
+        return this.wtaTriggerSourceByGeneration.get(generationId);
     }
 
     /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */

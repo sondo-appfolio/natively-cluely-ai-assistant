@@ -201,7 +201,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         kind: 'packaged_local',
         health: 'ready',
         requiredForStartup: false,
-        requiredForCoreFallback: true,
+        requiredForCoreFallback: false,
         message: 'Local embedding fallback ready',
         recoverable: true,
         details: { backend: status.backend, modelPath: status.modelPath },
@@ -214,14 +214,14 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     ProviderStatusRegistry.getInstance().setStatus({
       id: 'local-embedding',
       kind: 'packaged_local',
-      health: status.recoverable ? 'degraded' : 'missing_required_asset',
+      health: status.recoverable ? 'degraded' : 'missing_optional_dependency',
       requiredForStartup: false,
-      requiredForCoreFallback: true,
+      requiredForCoreFallback: false,
       // Human-readable status; `details.reason` carries the debug classification.
       message: status.recoverable
         ? 'Local embedding fallback running in degraded mode. Some semantic search features may be slower or less accurate.'
-        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
-      recoverable: status.recoverable,
+        : 'Optional local embedding model is not installed; cloud embeddings remain available.',
+      recoverable: true,
       details: { backend: status.backend, reason: status.reason, error: status.message },
     });
   }
@@ -249,11 +249,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     ProviderStatusRegistry.getInstance().setStatus({
       id: 'local-embedding',
       kind: 'packaged_local',
-      health: 'missing_required_asset',
+      health: 'missing_optional_dependency',
       requiredForStartup: false,
-      requiredForCoreFallback: true,
-      message: 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
-      recoverable: false,
+      requiredForCoreFallback: false,
+      message: 'Optional local embedding model is not installed; cloud embeddings remain available.',
+      recoverable: true,
       details: { reason: 'worker-died-before-ready', error: message },
     });
   }

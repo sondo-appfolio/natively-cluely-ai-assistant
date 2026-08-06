@@ -1419,9 +1419,10 @@ export class LLMHelper {
     this.activeCurlProvider = null;
     this.currentModelId = targetModelId;
 
-    // Update specific model props if needed
+    // Update specific model props if needed (gemini-setmodel-sync: all three family ids)
     if (targetModelId === GEMINI_PRO_MODEL) this.geminiModel = GEMINI_PRO_MODEL;
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
+    if (targetModelId === GEMINI_FLASH_LITE_MODEL) this.geminiModel = GEMINI_FLASH_LITE_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
   }

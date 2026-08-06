@@ -25,7 +25,14 @@ export interface LocalFallbackPreflightResult {
 let latestResult: LocalFallbackPreflightResult | null = null;
 let inFlight: Promise<LocalFallbackPreflightResult> | null = null;
 
-function statusFor(id: string, kind: ProviderKind, health: ProviderHealth, message: string, details?: Record<string, unknown>): ProviderStatus {
+function statusFor(
+  id: string,
+  kind: ProviderKind,
+  health: ProviderHealth,
+  message: string,
+  details?: Record<string, unknown>,
+  requiredForCoreFallback = true,
+): ProviderStatus {
   // No Natively provider is required for the app to start. The packaged local
   // fallback stack is only required for *core* intelligence features when no
   // cloud key is configured. requiredForCoreFallback: true marks providers
@@ -37,7 +44,7 @@ function statusFor(id: string, kind: ProviderKind, health: ProviderHealth, messa
     kind,
     health,
     requiredForStartup: false,
-    requiredForCoreFallback: true,
+    requiredForCoreFallback,
     message,
     recoverable: health !== 'missing_required_asset',
     details,
@@ -47,6 +54,7 @@ function statusFor(id: string, kind: ProviderKind, health: ProviderHealth, messa
 async function timedCheck(
   id: string,
   fn: () => Promise<{ ok: boolean; message: string; health?: ProviderHealth; recoverable?: boolean }> | { ok: boolean; message: string; health?: ProviderHealth; recoverable?: boolean },
+  optional = false,
 ): Promise<LocalFallbackPreflightCheck> {
   const start = performance.now();
   try {
@@ -54,19 +62,19 @@ async function timedCheck(
     return {
       id,
       ok: result.ok,
-      health: result.health || (result.ok ? 'ready' : 'missing_required_asset'),
+      health: result.health || (result.ok ? 'ready' : optional ? 'missing_optional_dependency' : 'missing_required_asset'),
       durationMs: Math.round(performance.now() - start),
       message: result.message,
-      recoverable: result.recoverable ?? result.ok,
+      recoverable: optional || result.recoverable === true || result.ok,
     };
   } catch (err: any) {
     return {
       id,
       ok: false,
-      health: 'missing_required_asset',
+      health: optional ? 'missing_optional_dependency' : 'missing_required_asset',
       durationMs: Math.round(performance.now() - start),
       message: err?.message || String(err),
-      recoverable: false,
+      recoverable: optional,
     };
   }
 }
@@ -219,9 +227,9 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     const checks: LocalFallbackPreflightCheck[] = [];
 
     // 1. ONNX / Transformers.js runtime imports.
-    checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers')));
-    checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
-    checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
+    checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers'), true));
+    checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common'), true));
+    checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node'), true));
 
     // 2. Required bundled model assets. In dev the models live under the repo's
     // resources/models/ and resolveModelPath() finds them; in packaged builds
@@ -231,10 +239,10 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       checks.push({
         id: `asset:${asset.id}`,
         ok: asset.ok,
-        health: asset.ok ? 'ready' : 'missing_required_asset',
+        health: asset.ok ? 'ready' : 'missing_optional_dependency',
         durationMs: 0,
         message: asset.ok ? `Found ${asset.path}` : asset.message,
-        recoverable: asset.ok,
+        recoverable: true,
       });
     }
 
@@ -271,7 +279,7 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
         } catch { /* keep trying */ }
       }
       return { ok: false, message: 'Xenova/bge-reranker-base model files missing from packaged resources/models/' };
-    }));
+    }, true));
 
     // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3, keytar).
     checks.push(await timedCheck('rust native audio module', async () => checkNativeModuleUnpacked()));
@@ -337,33 +345,36 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-embedding',
       'packaged_local',
-      localEmbeddingOk ? 'ready' : 'missing_required_asset',
+      localEmbeddingOk ? 'ready' : 'missing_optional_dependency',
       localEmbeddingOk
         ? 'Packaged local embedding fallback assets are ready'
-        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
+        : 'Optional local embedding model is not installed; cloud embeddings remain available.',
       {
         checks: checks.filter(c => c.id.includes('minilm') || c.id.includes('import') || c.id.startsWith('rust') || c.id.includes('sharp') || c.id.includes('sqlite-vec') || c.id.includes('better-sqlite3')),
       },
+      false,
     ));
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'intent-classifier',
       'packaged_local',
-      intentOk ? 'ready' : 'missing_required_asset',
+      intentOk ? 'ready' : 'missing_optional_dependency',
       intentOk
         ? 'Packaged zero-shot intent classifier assets are ready'
-        : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
+        : 'Optional local intent classifier is not installed; heuristic classification remains available.',
       { checks: checks.filter(c => c.id.includes('mobilebert') || c.id.includes('import')) },
+      false,
     ));
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-reranker',
       'packaged_local',
-      rerankerOk ? 'ready' : 'missing_required_asset',
+      rerankerOk ? 'ready' : 'missing_optional_dependency',
       rerankerOk
         ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
+        : 'Optional local reranker is not installed; standard retrieval remains available.',
       { checks: checks.filter(c => c.id === 'reranker model assets') },
+      false,
     ));
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
@@ -376,7 +387,7 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       { checks: checks.filter(c => c.id.startsWith('rust') || c.id.includes('sharp') || c.id.includes('sqlite-vec') || c.id.includes('better-sqlite3')) },
     ));
 
-    const ok = checks.every(c => c.ok || c.id === 'ollama probe');
+    const ok = checks.every(c => c.ok || c.health === 'missing_optional_dependency' || c.id === 'ollama probe');
     const result: LocalFallbackPreflightResult = {
       ok,
       startedAt,

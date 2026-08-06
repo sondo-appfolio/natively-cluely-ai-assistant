@@ -25,6 +25,7 @@ export type PiTelemetryEvent =
   | 'wta_live_session_memory_enabled'
   | 'wta_live_followup_resolved'
   | 'wta_context_free_clarification'
+  | 'wta_trigger_source'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
   | 'session_memory_recall_blocked_by_mode'
@@ -85,6 +86,7 @@ const ALLOWED_KEYS = new Set<string>([
   // routing / answer markers
   'event', 'answerType', 'mode', 'surface', 'routeSource', 'profilePolicy', 'isCoding',
   'reason', 'via', 'resolved', 'questionType', 'detectedSpeaker', 'isFollowUp', 'answerStyle',
+  'triggerSource',
   // session-memory markers (KIND/bucket only — never the value)
   'recalledKind', 'memoryKind', 'ageBucket', 'memItemCount', 'memNotes', 'memSize',
   'resolvedFollowup', 'isClarification', 'blockedByMode', 'compBlocked', 'correctionApplied',

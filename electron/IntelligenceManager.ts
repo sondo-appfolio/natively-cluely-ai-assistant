@@ -193,12 +193,22 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; sdRequirementsUiAdvance?: boolean; sdProblemKey?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; sdRequirementsUiAdvance?: boolean; sdProblemKey?: string; triggerSource?: 'human-observer-suggestion' }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 
     getSdRequirementsGateStatus() {
         return this.engine.getSdRequirementsGateStatus();
+    }
+
+    getLastWtaTriggerSource(): 'human-observer-suggestion' | undefined {
+        return this.engine.getLastWtaTriggerSource();
+    }
+
+    getWtaTriggerSourceForGeneration(
+        generationId?: number,
+    ): 'human-observer-suggestion' | undefined {
+        return this.engine.getWtaTriggerSourceForGeneration(generationId);
     }
 
     publishSdRequirementsGateStatus(softRefused: boolean = false): void {
@@ -262,11 +272,11 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
-    async stopMeeting(): Promise<string | null> {
-        const meetingId = await this.persistence.stopMeeting();
+    async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
+        const stopResult = await this.persistence.stopMeeting();
         // MeetingPersistence resets SessionTracker directly — hide gate strip.
         this.engine.publishSdRequirementsGateStatus(false);
-        return meetingId;
+        return stopResult;
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {

@@ -237,7 +237,7 @@ class ZeroShotClassifier {
                 kind: 'packaged_local',
                 health: 'ready',
                 requiredForStartup: false,
-                requiredForCoreFallback: true,
+                requiredForCoreFallback: false,
                 message: 'Intent classifier ready',
                 recoverable: true,
                 details: { backend: status.backend, modelPath: status.modelPath },
@@ -250,16 +250,16 @@ class ZeroShotClassifier {
         ProviderStatusRegistry.getInstance().setStatus({
             id: 'intent-classifier',
             kind: 'packaged_local',
-            health: status.recoverable ? 'degraded' : 'missing_required_asset',
+            health: status.recoverable ? 'degraded' : 'missing_optional_dependency',
             requiredForStartup: false,
-            requiredForCoreFallback: true,
+            requiredForCoreFallback: false,
             // Human-readable status; `details.reason` carries the debug
             // classification (module-missing / native-addon-missing / etc.)
             // for the renderer's diagnostic UI.
             message: status.recoverable
                 ? 'Intent classifier running in fallback mode (regex + heuristics). Smart suggestions may be less accurate.'
-                : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
-            recoverable: status.recoverable,
+                : 'Optional local intent classifier is not installed; heuristic classification remains available.',
+            recoverable: true,
             details: { backend: status.backend, reason: status.reason, error: status.message },
         });
     }
@@ -279,11 +279,11 @@ class ZeroShotClassifier {
         ProviderStatusRegistry.getInstance().setStatus({
             id: 'intent-classifier',
             kind: 'packaged_local',
-            health: 'missing_required_asset',
+            health: 'missing_optional_dependency',
             requiredForStartup: false,
-            requiredForCoreFallback: true,
-            message: 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
-            recoverable: false,
+            requiredForCoreFallback: false,
+            message: 'Optional local intent classifier is not installed; heuristic classification remains available.',
+            recoverable: true,
             details: { reason: 'worker-died-before-ready', error: message },
         });
     }

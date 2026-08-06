@@ -421,11 +421,9 @@ export class CredentialsManager {
         return this.credentials.aiResponseLanguage || 'auto';
     }
     public getDefaultModel(): string {
-        // Default to Flash-Lite: ~0.65s first-token vs ~2.3s for full Flash on
-        // the same prompt (measured), and faster output streaming — the
-        // Cluely-class interactive latency target. Full Flash / Pro remain
-        // user-selectable for harder problems.
-        return this.credentials.defaultModel || 'gemini-3.1-flash-lite';
+        // gemini-app-default: unset fallback is Flash (matches Settings UI init).
+        // Flash Lite remains selectable; persisted user defaults are never overwritten here.
+        return this.credentials.defaultModel || 'gemini-3.6-flash';
     }
 
     public getNativelyApiKey(): string | undefined {
@@ -827,8 +825,8 @@ export class CredentialsManager {
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
-                this.credentials.defaultModel = 'gemini-3.1-flash-lite';
-                console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash-Lite');
+                this.credentials.defaultModel = 'gemini-3.6-flash';
+                console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini 3.6 Flash');
             }
             if (this.credentials.sttProvider === 'natively') {
                 this.credentials.sttProvider = 'none';
