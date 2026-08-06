@@ -286,9 +286,10 @@ describe("Ticket 04(b): early design-sheet commitment stays visible post-gate wi
 
     // The answer path is grounded in the persisted sheet — no re-elicitation
     // of the earlier commitment was required from the current turn.
-    assert.match(out, /<design_sheet>/);
+    // Evidence may be XML-escaped inside <evidence> (&lt;design_sheet&gt;).
+    assert.match(out, /(?:<design_sheet>|&lt;design_sheet&gt;)/);
     assert.match(out, /Base62/);
-    assert.match(out, /<latest_interviewer>/);
+    assert.match(out, /(?:<latest_interviewer>|&lt;latest_interviewer&gt;)/);
     assert.match(out, /hot keys/i);
   });
 });
