@@ -8098,6 +8098,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  // Settings Audio live-STT sandbox (ticket 05) — real partial/final transcript
+  // stream on the audio-test mic path. Distinct from level meter + credential ping.
+  safeHandle('start-live-stt-sandbox', async (_event, deviceId?: string) => {
+    return appState.startLiveSttSandbox(deviceId);
+  });
+
+  safeHandle('stop-live-stt-sandbox', async () => {
+    appState.stopLiveSttSandbox();
+    return { success: true };
+  });
+
   safeHandle('set-recognition-language', async (_, key: string) => {
     appState.setRecognitionLanguage(key);
     return { success: true };

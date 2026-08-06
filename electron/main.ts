@@ -1185,6 +1185,10 @@ import {
   listenTransportToggle,
   type ListenTransportSnapshot,
 } from "./audio/listenTransport"
+import {
+  resolveLiveSttSandboxStart,
+  wireLiveSttSandbox,
+} from "./audio/liveSttSandbox"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
@@ -3092,6 +3096,9 @@ export class AppState {
   private microphoneCapture: MicrophoneCapture | null = null;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
+  /** Settings Audio live-STT sandbox (ticket 05) — separate from meeting STT. */
+  private audioTestStt: STTProvider | null = null;
+  private _audioTestSttTeardown: (() => void) | null = null;
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
 
@@ -5399,6 +5406,10 @@ export class AppState {
     // awaiting resolveMacScreenCaptureCapability sees the change and skips
     // constructing the system capture (avoids orphaned-capture race).
     this._audioTestEpoch++;
+    // Live-STT sandbox rides the same audio-test capture lifecycle — tear it
+    // down before the mic handle so STT sockets don't keep writing into a
+    // stopped capture epoch.
+    this.stopLiveSttSandbox();
     // HANG FIX: cancel a pending debounced system-audio probe. If the user
     // switched away from the Audio tab before the 600ms timer fired, the
     // CoreAudio tap was never created — clearing the timer here ensures it
@@ -5425,6 +5436,125 @@ export class AppState {
         console.warn('[Main] Stopping system audio test threw:', e);
       }
       this.audioTestSystemCapture = null;
+    }
+  }
+
+  /**
+   * Settings Audio live-STT sandbox (InterviewMan listen parity / ticket 05).
+   * Starts real partial/final transcript streaming on the audio-test mic path
+   * using createSTTProvider — not the level meter or credential ping.
+   */
+  public async startLiveSttSandbox(deviceId?: string): Promise<{
+    success: boolean;
+    reason?: 'stt_unready' | string;
+    error?: string;
+  }> {
+    if (this.isMeetingActive) {
+      return {
+        success: false,
+        error: 'Live transcript test is unavailable while a meeting is active. End the meeting first.',
+      };
+    }
+
+    const gate = resolveLiveSttSandboxStart(this.isSttReadyForListenTransport());
+    if (!gate.ok) {
+      return { success: false, reason: gate.reason };
+    }
+
+    // Level meter auto-starts on Audio tab open; ensure capture exists before
+    // wiring STT so Listen can reuse the same mic handle.
+    if (!this.audioTestCapture) {
+      try {
+        await this.startAudioTest(deviceId);
+      } catch (err: any) {
+        return {
+          success: false,
+          error: err?.message || 'Failed to start microphone for live transcript test.',
+        };
+      }
+    }
+    if (!this.audioTestCapture) {
+      return { success: false, error: 'Microphone test capture is not available.' };
+    }
+
+    this.stopLiveSttSandbox();
+
+    let stt: STTProvider | null = null;
+    try {
+      stt = this.createSTTProvider('user');
+    } catch (err: any) {
+      console.warn('[Main] Live STT sandbox createSTTProvider failed:', err);
+      return {
+        success: false,
+        error: err?.message || 'Failed to create speech-to-text provider.',
+      };
+    }
+    if (!stt) {
+      return { success: false, reason: 'stt_unready' };
+    }
+
+    const sandboxEpoch = this._audioTestEpoch;
+    const capture = this.audioTestCapture;
+    const broadcastTargets = (): BrowserWindow[] =>
+      [
+        this.settingsWindowHelper.getSettingsWindow(),
+        this.getWindowHelper().getLauncherWindow(),
+        this.getWindowHelper().getOverlayWindow(),
+      ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
+
+    this.audioTestStt = stt;
+    this._audioTestSttTeardown = wireLiveSttSandbox({
+      stt,
+      capture,
+      isCurrent: () =>
+        this._audioTestEpoch === sandboxEpoch &&
+        this.audioTestStt === stt &&
+        this.audioTestCapture === capture,
+      emitTranscript: (payload) => {
+        for (const target of broadcastTargets()) {
+          this.sendToWindow(target, 'audio-test-transcript', payload);
+        }
+      },
+      emitError: (message) => {
+        for (const target of broadcastTargets()) {
+          this.sendToWindow(target, 'audio-test-transcript-error', message);
+        }
+      },
+    });
+
+    try {
+      stt.start();
+    } catch (err: any) {
+      console.error('[Main] Live STT sandbox start failed:', err);
+      this.stopLiveSttSandbox();
+      return {
+        success: false,
+        error: err?.message || 'Failed to start speech-to-text stream.',
+      };
+    }
+
+    console.log('[Main] Live STT sandbox listening');
+    return { success: true };
+  }
+
+  /** Stop Settings live-STT sandbox without tearing down the level meter. */
+  public stopLiveSttSandbox(): void {
+    if (this._audioTestSttTeardown) {
+      try {
+        this._audioTestSttTeardown();
+      } catch (e) {
+        console.warn('[Main] Live STT sandbox teardown threw:', e);
+      }
+      this._audioTestSttTeardown = null;
+    }
+    if (this.audioTestStt) {
+      console.log('[Main] Stopping Live STT sandbox');
+      try {
+        this.audioTestStt.stop();
+      } catch (e) {
+        console.warn('[Main] Live STT sandbox stop threw:', e);
+      }
+      this.audioTestStt = null;
     }
   }
 
