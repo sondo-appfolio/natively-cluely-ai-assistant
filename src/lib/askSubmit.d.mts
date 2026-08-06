@@ -1,10 +1,19 @@
 export const LISTEN_TRANSPORT_EFFECTS: readonly string[];
 
+export function planBottomAskBarAction(input: {
+  intent: 'think' | 'submit_typed' | 'focus_bar';
+  hasQuestionOrAttachments?: boolean;
+}): {
+  action: 'think' | 'submit' | 'empty_error' | 'focus_bar';
+  effects: readonly string[];
+};
+
+/** @deprecated Use planBottomAskBarAction */
 export function planAskSubmitAction(input: {
   isVoiceCaptureArmed: boolean;
   hasQuestionOrAttachments: boolean;
 }): {
-  action: 'arm_voice_capture' | 'submit' | 'empty_speech_error';
+  action: 'think' | 'submit' | 'empty_error' | 'focus_bar';
   effects: readonly string[];
 };
 

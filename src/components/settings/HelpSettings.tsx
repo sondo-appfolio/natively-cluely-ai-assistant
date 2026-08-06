@@ -47,32 +47,31 @@ const MockAppInterface = () => {
     return (
         <div className="flex flex-col items-center w-full max-w-[600px] mx-auto opacity-100 relative h-[380px] overflow-hidden">
             <div className="flex flex-col items-center w-[600px] transform scale-[0.8] origin-top absolute top-0 pt-2">
-                {/* Top Pill Replica */}
+                {/* Top Pill Replica — left triangle (end) + logo; right red square (listen) */}
                 <div className="flex justify-center mb-2 select-none z-50">
                     <div className="flex items-center gap-2 rounded-full backdrop-blur-md pl-1.5 pr-1.5 py-1.5 bg-bg-item-surface border border-border-subtle shadow-sm">
-                        {/* Logo Button */}
-                        <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
-                            <img
-                                src={nativelyIcon}
-                                alt="Natively"
-                                className="w-[20px] h-[20px] object-contain"
-                                style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
-                            />
+                        <div className="flex items-center gap-0.5">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-item-active text-text-primary border border-border-muted">
+                                <svg width="10" height="12" viewBox="0 0 10 12" className="opacity-85" aria-hidden>
+                                    <path d="M0.75 6 9.25 0.75v10.5L0.75 6Z" fill="currentColor" />
+                                </svg>
+                            </div>
+                            <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
+                                <img
+                                    src={nativelyIcon}
+                                    alt="Natively"
+                                    className="w-[20px] h-[20px] object-contain"
+                                    style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
+                                />
+                            </div>
                         </div>
-                        {/* Center Segment */}
                         <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-bg-item-surface text-text-primary text-[12px] font-medium border border-border-muted">
                             <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                             <span className="tracking-wide opacity-80">Hide</span>
                         </div>
-                        {/* Red square = listen transport; triangle = end meeting */}
-                        <div className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-border-muted">
+                        <div className="flex items-center pl-1.5 ml-0.5 border-l border-border-muted">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 border border-red-500/25">
                                 <div className="w-3 h-3 rounded-[2.5px] bg-red-400" />
-                            </div>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-item-active text-text-primary border border-border-muted">
-                                <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
-                                    <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
-                                </svg>
                             </div>
                         </div>
                     </div>
@@ -540,17 +539,17 @@ const MockPillControlsAnim = () => {
                 </div>
             </div>
 
-            {/* Triangle → end meeting */}
+            {/* Left triangle → end meeting (sits left of the Natively icon) */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
                 <div className="w-8 h-8 rounded-full bg-bg-item-active border border-border-muted flex items-center justify-center shrink-0 text-text-primary">
-                    <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
-                        <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+                    <svg width="10" height="12" viewBox="0 0 10 12" className="opacity-85" aria-hidden>
+                        <path d="M0.75 6 9.25 0.75v10.5L0.75 6Z" fill="currentColor" />
                     </svg>
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                     <span className="text-[11px] text-text-primary font-medium shrink-0">End meeting</span>
-                    <span className="text-[11px] text-text-tertiary">— triangle tears down the session</span>
+                    <span className="text-[11px] text-text-tertiary">— left triangle next to the logo</span>
                 </div>
             </div>
 
@@ -1243,9 +1242,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="p-3 rounded-xl border border-border-subtle bg-bg-item-surface space-y-2">
                             <div className="text-[11px] font-semibold text-text-primary uppercase tracking-wider">Listen controls (InterviewMan map)</div>
                             <ul className="text-[12px] text-text-secondary leading-relaxed space-y-1.5 list-disc pl-4">
-                                <li><strong className="text-text-primary">Red square</strong> — pause or resume listening (STT capture). Does not end the meeting.</li>
-                                <li><strong className="text-text-primary">Triangle</strong> — end the meeting and return to the launcher.</li>
-                                <li><strong className="text-text-primary">Ask / Submit</strong> ({CMD_SYMBOL}5) — send a spoken or typed question to the AI. Does not start or stop listening.</li>
+                                <li><strong className="text-text-primary">Left triangle</strong> (next to the Natively icon) — end the meeting and return to the launcher.</li>
+                                <li><strong className="text-text-primary">Red square</strong> (right side) — pause or resume listening (STT capture). Does not end the meeting.</li>
+                                <li><strong className="text-text-primary">Focus Ask bar</strong> ({CMD_SYMBOL}5) — focus the bottom Ask bar (Think / type / ↑). Does not start or stop listening — use the red square for live STT.</li>
                             </ul>
                             <p className="text-[11px] text-text-tertiary leading-relaxed">
                                 Listening arms when a meeting starts (unless Ambient AI Chat is on, or speech-to-text is not ready). Live transcript text appears without clicking Ask first. Use Settings → Audio → Listen to verify live STT before a meeting.
@@ -1269,7 +1268,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
                                 { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
                                 { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
-                                { Icon: Zap, color: 'emerald', title: 'Ask / Submit', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Sends spoken or typed words as an AI question. Does not arm or pause listening — use the red square for that.' },
+                                { Icon: Zap, color: 'emerald', title: 'Focus Ask bar', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Focuses the bottom Ask bar (Think = What-to-Answer; type + ↑ = ask). Live STT is the red square only.' },
                                 { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
                                 { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
                                 { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },

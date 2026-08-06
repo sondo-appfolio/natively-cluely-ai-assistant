@@ -35,11 +35,11 @@ function ListenSquarePaused() {
     );
 }
 
-/** Down-pointing triangle — end meeting (not listen pause). */
+/** Left-pointing triangle — end meeting (not listen pause). */
 function EndMeetingTriangle() {
     return (
-        <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
-            <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+        <svg width="10" height="12" viewBox="0 0 10 12" className="opacity-85" aria-hidden>
+            <path d="M0.75 6 9.25 0.75v10.5L0.75 6Z" fill="currentColor" />
         </svg>
     );
 }
@@ -70,11 +70,33 @@ export default function TopPill({
         "
                 style={appearance.pillStyle}
             >
-                <div className="draggable-area">
-                    {/* LOGO BUTTON */}
+                {/* LEFT CLUSTER — end meeting + logo (InterviewMan: exit sits left of brand) */}
+                <div className="flex items-center gap-0.5" data-testid="end-meeting-cluster">
                     <button
-                        onClick={onLogoClick}
+                        type="button"
+                        data-testid="end-meeting"
+                        onClick={onEndMeeting}
+                        title="End meeting"
+                        aria-label="End meeting"
                         className={`
+              w-7 h-7
+              rounded-full
+              overlay-icon-surface
+              overlay-text-primary
+              flex items-center justify-center
+              interaction-base interaction-press
+              transition-colors duration-200
+              hover:bg-white/10 hover:opacity-100 opacity-85
+            `}
+                        style={appearance.iconStyle}
+                    >
+                        <EndMeetingTriangle />
+                    </button>
+
+                    <div className="draggable-area">
+                        <button
+                            onClick={onLogoClick}
+                            className={`
               w-7 h-7
               rounded-full
               overlay-icon-surface
@@ -83,16 +105,17 @@ export default function TopPill({
               relative overflow-hidden
               interaction-base interaction-press
             `}
-                        style={appearance.iconStyle}
-                    >
-                        <img
-                            src={icon}
-                            alt="Natively"
-                            className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                            draggable="false"
-                            onDragStart={(e) => e.preventDefault()}
-                        />
-                    </button>
+                            style={appearance.iconStyle}
+                        >
+                            <img
+                                src={icon}
+                                alt="Natively"
+                                className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
+                                draggable="false"
+                                onDragStart={(e) => e.preventDefault()}
+                            />
+                        </button>
+                    </div>
                 </div>
 
                 {/* CENTER SEGMENT */}
@@ -123,15 +146,11 @@ export default function TopPill({
                     <span className="tracking-wide opacity-80 group-hover:opacity-100">{expanded ? "Hide" : "Show"}</span>
                 </button>
 
-                {/* TRANSPORT CLUSTER — InterviewMan control map (ADR 0014)
-                    Red square = listen pause/resume. Triangle = end meeting.
-                    Hairline divider + tight gap keep the pair visually distinct
-                    from Show/Hide without implying either ends via the square. */}
+                {/* RED SQUARE — listen transport pause/resume (right side) */}
                 <div
-                    className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-white/12"
+                    className="flex items-center pl-1.5 ml-0.5 border-l border-white/12"
                     data-testid="listen-transport-cluster"
                 >
-                    {/* RED SQUARE — listen transport pause/resume */}
                     <button
                         type="button"
                         data-testid="listen-transport-toggle"
@@ -153,28 +172,6 @@ export default function TopPill({
                         style={appearance.iconStyle}
                     >
                         {listenArmed ? <ListenSquareArmed /> : <ListenSquarePaused />}
-                    </button>
-
-                    {/* TRIANGLE — end meeting */}
-                    <button
-                        type="button"
-                        data-testid="end-meeting"
-                        onClick={onEndMeeting}
-                        title="End meeting"
-                        aria-label="End meeting"
-                        className={`
-              w-7 h-7
-              rounded-full
-              overlay-icon-surface
-              overlay-text-primary
-              flex items-center justify-center
-              interaction-base interaction-press
-              transition-colors duration-200
-              hover:bg-white/10 hover:opacity-100 opacity-85
-            `}
-                        style={appearance.iconStyle}
-                    >
-                        <EndMeetingTriangle />
                     </button>
                 </div>
             </div>

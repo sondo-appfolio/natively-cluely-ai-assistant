@@ -61,7 +61,7 @@ test('resolver maps catalog titles to live default accelerators', async () => {
   assert.deepEqual(byId.generate.keybindIds, ['general:process-screenshots']);
   assert.deepEqual(byId.generate.accelerators, ['CommandOrControl+Enter']);
 
-  assert.equal(byId.recording.title, 'Start/Stop Recording');
+  assert.equal(byId.recording.title, 'Focus Ask Bar');
   assert.deepEqual(byId.recording.keybindIds, ['chat:answer']);
   assert.deepEqual(byId.recording.accelerators, ['CommandOrControl+5']);
 

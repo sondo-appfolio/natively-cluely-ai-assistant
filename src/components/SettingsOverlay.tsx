@@ -81,29 +81,31 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                     data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
                     className="flex flex-col items-center pointer-events-none -mt-96"
                 >
-                    {/* TopPill Replica */}
+                    {/* TopPill Replica — left triangle (end) + logo; right red square (listen) */}
                     <div className="flex justify-center mb-2 select-none z-50">
                         <div className="flex items-center gap-2 rounded-full overlay-pill-surface backdrop-blur-md pl-1.5 pr-1.5 py-1.5" style={appearance.pillStyle}>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface" style={appearance.iconStyle}>
-                                <img
-                                    src={icon}
-                                    alt="Natively"
-                                    className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                                    draggable="false"
-                                />
+                            <div className="flex items-center gap-0.5">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle} title={t('End meeting')}>
+                                    <svg width="10" height="12" viewBox="0 0 10 12" className="opacity-85" aria-hidden>
+                                        <path d="M0.75 6 9.25 0.75v10.5L0.75 6Z" fill="currentColor" />
+                                    </svg>
+                                </div>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface" style={appearance.iconStyle}>
+                                    <img
+                                        src={icon}
+                                        alt="Natively"
+                                        className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
+                                        draggable="false"
+                                    />
+                                </div>
                             </div>
                             <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                                 <span className="opacity-80 tracking-wide">{t('Hide')}</span>
                             </div>
-                            <div className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-white/12">
+                            <div className="flex items-center pl-1.5 ml-0.5 border-l border-white/12">
                                 <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface text-red-400 bg-red-500/10" style={appearance.iconStyle} title={t('Pause listening')}>
                                     <div className="w-3 h-3 rounded-[2.5px] bg-red-400 opacity-90" />
-                                </div>
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle} title={t('End meeting')}>
-                                    <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
-                                        <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
-                                    </svg>
                                 </div>
                             </div>
                         </div>
@@ -2639,7 +2641,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <div className="mb-3">
                                                 <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
                                                 <p className="text-[11px] text-text-tertiary mt-1 leading-relaxed">
-                                                    {t('Ask / Submit sends a question to the AI. It does not start listening — use the red square on the overlay to pause or resume STT. The triangle ends the meeting.')}
+                                                    {t('Focus Ask bar focuses Think / type / ↑. It does not start listening — use the red square to pause or resume live STT. The triangle ends the meeting.')}
                                                 </p>
                                             </div>
                                             <div className="space-y-1">
@@ -2648,7 +2650,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
                                                     { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
-                                                    { id: 'answer', label: 'Ask / Submit', icon: <Mic size={14} /> },
+                                                    { id: 'answer', label: 'Focus Ask bar', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
                                                     { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'scrollUp', label: 'Scroll Up', icon: <ArrowUp size={14} /> },

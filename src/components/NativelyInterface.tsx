@@ -1,6 +1,5 @@
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
-  ArrowRight,
   ArrowDown,
   ChevronDown,
   Code,
@@ -19,7 +18,6 @@ import {
   SlidersHorizontal,
   Keyboard,
   X,
-  Zap,
 } from 'lucide-react';
 import { KeyboardShortcutsSheet } from './KeyboardShortcutsSheet';
 import {
@@ -259,7 +257,11 @@ import {
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
-import { planAskSubmitAction, askSubmitTouchesListenTransport } from '../lib/askSubmit.mjs';
+import {
+  planBottomAskBarAction,
+  askSubmitTouchesListenTransport,
+} from '../lib/askSubmit.mjs';
+import BottomAskBar from './ui/BottomAskBar';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import {
@@ -5795,137 +5797,122 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cleanups.forEach((fn) => fn());
   }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
 
-  // Ask/submit (chat:answer / Answer chip): spoken or typed → AI turn.
-  // Must NEVER call toggleListenTransport — listen arming is red-square only
-  // (interviewman-control-map / ticket 04).
-  const handleAnswerNow = async () => {
+  // chat:answer → focus bottom Ask bar (Ask chip removed; ADR 0014 amend).
+  // Must NEVER call toggleListenTransport — live STT is red-square only.
+  const handleAnswerNow = () => {
+    const askPlan = planBottomAskBarAction({ intent: 'focus_bar' });
+    if (askSubmitTouchesListenTransport(askPlan.effects)) {
+      console.error('[NativelyInterface] Ask bar must not touch listen transport', askPlan);
+      return;
+    }
     if (isManualRecording) {
-      if (!tryBeginOverlayAction('answer_now')) return;
+      isRecordingRef.current = false;
+      setIsManualRecording(false);
+      setManualTranscript('');
+      setVoiceInput('');
+      voiceInputRef.current = '';
+      manualTranscriptRef.current = '';
+    }
+    setIsExpanded(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => textInputRef.current?.focus());
+    });
+  };
+
+  /** Bottom-bar Think → What-to-Answer (not AssistLLM). */
+  const handleThink = () => {
+    const askPlan = planBottomAskBarAction({ intent: 'think' });
+    if (askSubmitTouchesListenTransport(askPlan.effects)) {
+      console.error('[NativelyInterface] Think must not touch listen transport', askPlan);
+      return;
+    }
+    handleWhatToSay();
+  };
+
+  /** Bottom-bar blue ↑ / Enter → typed AI ask (not mic arm, not WTA). */
+  const handleTypedAskSubmit = async () => {
+    const question = inputValue.trim();
+    const currentAttachments = attachedContext;
+    const askPlan = planBottomAskBarAction({
+      intent: 'submit_typed',
+      hasQuestionOrAttachments: Boolean(question) || currentAttachments.length > 0,
+    });
+    if (askSubmitTouchesListenTransport(askPlan.effects)) {
+      console.error('[NativelyInterface] Typed ask must not touch listen transport', askPlan);
+      return;
+    }
+    if (askPlan.action === 'empty_error') {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          text: '⚠️ Type a question in the Ask bar, then submit.',
+        },
+      ]);
+      return;
+    }
+    if (!tryBeginOverlayAction('answer_now')) return;
+    try {
+      setInputValue('');
+      setAttachedContext([]);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'user',
+          text: question || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
+          hasScreenshot: currentAttachments.length > 0,
+          screenshotPreview: currentAttachments[0]?.preview,
+        },
+      ]);
+
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+
+      forceFinalizeStaleRagStream();
+      const placeholderId = genMessageId();
+      streamingMsgIdRef.current = placeholderId;
+      streamingIntentRef.current = 'chat';
+      streamingTextRef.current = '';
+      streamingNodeRef.current = null;
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      pinAnswerPanel();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: placeholderId,
+          role: 'system',
+          text: '',
+          intent: 'chat',
+          isStreaming: true,
+        },
+      ]);
+
+      setIsProcessing(true);
+
       try {
-        // End Ask voice-capture arming and send accumulated input to the AI path.
-        // Does not pause/resume listen transport.
-        isRecordingRef.current = false;
-        setIsManualRecording(false);
-        setManualTranscript('');
-
-        window.electronAPI
-          .finalizeMicSTT()
-          .catch((err) => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
-
-        const currentAttachments = attachedContext;
-        setAttachedContext([]);
-
-        const question = mergeTranscriptChunks(
-          voiceInputRef.current,
-          manualTranscriptRef.current,
-        ).trim();
-        setVoiceInput('');
-        voiceInputRef.current = '';
-        setManualTranscript('');
-        manualTranscriptRef.current = '';
-
-        const askPlan = planAskSubmitAction({
-          isVoiceCaptureArmed: true,
-          hasQuestionOrAttachments: Boolean(question) || currentAttachments.length > 0,
-        });
-        if (askSubmitTouchesListenTransport(askPlan.effects)) {
-          console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
-          return;
-        }
-
-        if (askPlan.action === 'empty_speech_error') {
-          if (sttUserStatus === 'failed' && sttUserError) {
-            const errCat = categorizeSttError(sttUserError);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: `❌ ${errCat.title}: ${errCat.body}`,
-              },
-            ]);
-          } else if (sttUserStatus === 'reconnecting') {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⏳ STT is reconnecting, try again in a moment.',
-              },
-            ]);
-          } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-              },
-            ]);
-          }
-          return;
-        }
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'user',
-            text: question,
-            hasScreenshot: currentAttachments.length > 0,
-            screenshotPreview: currentAttachments[0]?.preview,
-          },
-        ]);
-
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
-
-        // A previous turn's RAG answer may still be deferred-draining (see
-        // forceFinalizeStaleRagStream's declaration) — force it to its final
-        // state before this new placeholder can become "the last message".
-        forceFinalizeStaleRagStream();
-        const placeholderId = genMessageId();
-        streamingMsgIdRef.current = placeholderId;
-        streamingIntentRef.current = 'chat';
-        streamingTextRef.current = '';
-        streamingNodeRef.current = null;
-        if (streamingRafRef.current !== null) {
-          cancelAnimationFrame(streamingRafRef.current);
-          streamingRafRef.current = null;
-        }
-        pinAnswerPanel();
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: placeholderId,
-            role: 'system',
-            text: '',
-            intent: 'chat',
-            isStreaming: true,
-          },
-        ]);
-
-        setIsProcessing(true);
-
-        try {
-          let prompt = '';
-
-          if (currentAttachments.length > 0) {
-            prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
+        let prompt = '';
+        if (currentAttachments.length > 0) {
+          prompt = `You are a helper. The user has provided a screenshot and a typed question/command.
 User said: "${question}"
 
 Instructions:
 1. Analyze the screenshot in the context of what the user said.
 2. Provide a direct, helpful answer.
 3. Be concise.`;
-          } else {
-            const ragResult = await window.electronAPI.ragQueryLive?.(question);
-            if (ragResult?.success) {
-              return;
-            }
+        } else {
+          const ragResult = await window.electronAPI.ragQueryLive?.(question);
+          if (ragResult?.success) {
+            return;
+          }
 
-            prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
+          prompt = `You are a real-time interview assistant. The user typed a question from their interviewer or about the interview.
 Instructions:
 1. Extract the core question being asked
 2. Provide a clear, concise, and professional answer that the user can say out loud
@@ -5934,64 +5921,38 @@ Instructions:
 5. Format for speaking out loud, not for reading
 
 Provide only the answer, nothing else.`;
-          }
-
-          requestStartTimeRef.current = Date.now();
-          await window.electronAPI.streamGeminiChat(
-            question,
-            currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-            prompt,
-            { skipSystemPrompt: true },
-          );
-        } catch (err) {
-          setIsProcessing(false);
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.isStreaming && last.text === '') {
-              return prev.slice(0, -1).concat({
-                id: genMessageId(),
-                role: 'system',
-                text: `❌ Error starting stream: ${err}`,
-              });
-            }
-            return [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: `❌ Error: ${err}`,
-              },
-            ];
-          });
         }
-      } finally {
-        endOverlayAction('answer_now');
-      }
-    } else {
-      // Arm Ask voice-capture only (user-mic → submit). Listen transport is
-      // independent — do not call toggleListenTransport here.
-      const askPlan = planAskSubmitAction({
-        isVoiceCaptureArmed: false,
-        hasQuestionOrAttachments: false,
-      });
-      if (askSubmitTouchesListenTransport(askPlan.effects)) {
-        console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
-        return;
-      }
 
-      setVoiceInput('');
-      voiceInputRef.current = '';
-      setManualTranscript('');
-      isRecordingRef.current = true; // Update ref immediately
-      setIsManualRecording(true);
-
-      // Ensure native audio is connected
-      try {
-        // Native audio is now managed by main process
-        // await window.electronAPI.invoke('native-audio-connect');
+        requestStartTimeRef.current = Date.now();
+        await window.electronAPI.streamGeminiChat(
+          question,
+          currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+          prompt,
+          { skipSystemPrompt: true },
+        );
       } catch (err) {
-        // Already connected, that's fine
+        setIsProcessing(false);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.isStreaming && last.text === '') {
+            return prev.slice(0, -1).concat({
+              id: genMessageId(),
+              role: 'system',
+              text: `❌ Error starting stream: ${err}`,
+            });
+          }
+          return [
+            ...prev,
+            {
+              id: genMessageId(),
+              role: 'system',
+              text: `❌ Error: ${err}`,
+            },
+          ];
+        });
       }
+    } finally {
+      endOverlayAction('answer_now');
     }
   };
 
@@ -6158,7 +6119,9 @@ Provide only the answer, nothing else.`;
   // Refresh the latest-handler ref on every render so the captured-key
   // listener (mounted with [] deps) calls the CURRENT closure, not a
   // stale snapshot from first render.
-  handleManualSubmitRef.current = handleManualSubmit;
+  handleManualSubmitRef.current = () => {
+    void handleTypedAskSubmit();
+  };
 
   const clearChat = () => {
     resetChatState();
@@ -8530,28 +8493,6 @@ Provide only the answer, nothing else.`;
                 >
                   <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                 </button>
-                <button
-                  onClick={handleAnswerNow}
-                  data-testid="ask-submit-chip"
-                  title={t('Ask / Submit')}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
-                    isManualRecording
-                      ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
-                      : 'overlay-chip-surface overlay-text-interactive'
-                  }`}
-                  style={isManualRecording ? undefined : appearance.chipStyle}
-                >
-                  {isManualRecording ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      {t('Submit')}
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3 h-3 opacity-70" /> {t('Ask')}
-                    </>
-                  )}
-                </button>
                 </div>
               </div>
 
@@ -8598,7 +8539,7 @@ Provide only the answer, nothing else.`;
                       ))}
                     </div>
                     <span className="text-[10px] overlay-text-muted">
-                      {t('Ask a question or click Ask')}
+                      {t('Ask a question in the Ask bar below')}
                     </span>
                   </div>
                 )}
@@ -8704,13 +8645,24 @@ Provide only the answer, nothing else.`;
                                     overlay no longer accidentally engage the
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
-                <div className="relative group" data-stealth-engage="true">
-                  <input
-                    ref={textInputRef}
-                    data-testid="overlay-chat-input"
-                    type="text"
+                <div data-stealth-engage="true">
+                  <BottomAskBar
                     value={inputValue}
-                    onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
+                    onChange={(v) => {
+                      setInputValue(v);
+                      setSkillPickerIndex(0);
+                    }}
+                    onThink={handleThink}
+                    onSubmit={() => {
+                      void handleTypedAskSubmit();
+                    }}
+                    inputRef={textInputRef}
+                    placeholder={t('Ask about your interview…')}
+                    thinkLabel={t('Think')}
+                    onMouseDown={blockInputFocus}
+                    readOnly={stealthTapActive}
+                    inputClassName={`${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    inputStyle={appearance.inputStyle}
                     onKeyDown={(e) => {
                       if (filteredSkills.length > 0 && skillPickerQuery !== null) {
                         if (e.key === 'ArrowUp') {
@@ -8736,75 +8688,23 @@ Provide only the answer, nothing else.`;
                       }
                       if (e.key !== 'Enter' || e.repeat) return;
                       // Cmd/Ctrl+Enter belongs to general:process-screenshots.
-                      // Let it bubble to the window keydown handler instead of
-                      // submitting — handleManualSubmit silently returns on an
-                      // empty input, which is why the shortcut appeared dead.
                       if (e.metaKey || e.ctrlKey) return;
                       e.preventDefault();
-                      handleManualSubmit();
+                      void handleTypedAskSubmit();
                     }}
-                    // Block native DOM focus on click — the panel becoming
-                    // key window is exactly the signal coding-interview
-                    // platforms watch for via window.onblur on the parent.
-                    // mousedown listener (capture phase) already engaged
-                    // the CGEventTap, so typing routes through that path.
-                    onMouseDown={blockInputFocus}
-                    readOnly={stealthTapActive}
-                    // Engaged-session appearance. On macOS the input takes real
-                    // DOM focus on click (the panel can hold key focus without
-                    // activating), so it shows the aurora glow and the green
-                    // ring only appears in the explicitly hotkey-engaged tap
-                    // mode. Windows can never focus this input — doing so would
-                    // steal the meeting app's foreground — so it would otherwise
-                    // sit permanently unfocused-looking AND permanently green,
-                    // since every click there engages the stealth hook. Drive
-                    // the same aurora glow with a class instead, and drop the
-                    // green, so both platforms look identical on click.
-                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
-                    style={appearance.inputStyle}
-                  />
-
-                  {/* Skill picker — portal so it escapes the overflow-hidden shell */}
-                  {filteredSkills.length > 0 && skillPickerQuery !== null &&
-                    createPortal(
-                      <SkillPicker
-                        skills={filteredSkills}
-                        selectedIndex={clampedPickerIndex}
-                        anchorEl={textInputRef.current}
-                        onSelect={selectSkill}
-                      />,
-                      document.body,
-                    )
-                  }
-
-                  {/* Custom Rich Placeholder */}
-                  {!inputValue && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>{t('Ask anything on screen or conversation, or')}</span>
-                      <div className="flex items-center gap-1 opacity-80">
-                        {(
-                          shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
-                        ).map((key, i) => (
-                          <React.Fragment key={i}>
-                            {i > 0 && <span className="text-[10px]">+</span>}
-                            <kbd
-                              className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center overlay-control-surface overlay-text-secondary"
-                              style={appearance.controlStyle}
-                            >
-                              {key}
-                            </kbd>
-                          </React.Fragment>
-                        ))}
-                      </div>
-                      <span>{t('for selective screenshot')}</span>
-                    </div>
-                  )}
-
-                  {!inputValue && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none opacity-20">
-                      <span className="text-[10px]">↵</span>
-                    </div>
-                  )}
+                  >
+                    {filteredSkills.length > 0 &&
+                      skillPickerQuery !== null &&
+                      createPortal(
+                        <SkillPicker
+                          skills={filteredSkills}
+                          selectedIndex={clampedPickerIndex}
+                          anchorEl={textInputRef.current}
+                          onSelect={selectSkill}
+                        />,
+                        document.body,
+                      )}
+                  </BottomAskBar>
                 </div>
 
                 {/* Bottom Row */}
@@ -8956,22 +8856,6 @@ Provide only the answer, nothing else.`;
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleManualSubmit}
-                    disabled={!inputValue.trim()}
-                    className={`
-                                    w-7 h-7 rounded-full flex items-center justify-center
-                                    interaction-base interaction-press
-                                    ${
-                                      inputValue.trim()
-                                        ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                        : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
-                                    }
-                                `}
-                    style={inputValue.trim() ? undefined : appearance.iconStyle}
-                  >
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               </div>
             </motion.div>
