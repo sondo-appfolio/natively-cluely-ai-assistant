@@ -1,6 +1,6 @@
 # InterviewMan listen parity (desktop)
 
-Glossary for desktop listen/transcript/transport UX that mirrors InterviewMan: always-on live STT, red-square transport, triangle end-meeting, Ask/submit separate, plus Settings live-STT sandbox. Phone remote work in this effort stays a **phone-control-surface** over Phone Mirror — desktop remains the session host (see `docs/standalone-ios/CONTEXT.md`, ADR 0011).
+Glossary for desktop listen/transcript/transport UX that mirrors InterviewMan: always-on live STT, red-square transport, triangle end-meeting, Ask/submit separate, plus Settings live-STT sandbox. Phone may be a **phone-stt-source** and **phone-control-surface** over Phone Mirror; desktop remains the LLM/planner host (see `docs/standalone-ios/CONTEXT.md`, ADR 0015). Manual QA: [QA-CHECKLIST.md](./QA-CHECKLIST.md).
 
 ## Language
 
@@ -43,7 +43,7 @@ _Avoid_: Treating phone STT as phone-hosted What-to-Answer; requiring desktop mi
 **Dev:** Settings already has an audio test — is that the sandbox?  
 **Expert:** Not today. Levels and credential ping are not **live-transcript-surfaces**. The sandbox must stream real STT text.  
 **Dev:** Does the phone run STT itself for parity?  
-**Expert:** No — **interviewman-parity-scope** phone work is **phone-control-surface** on Phone Mirror. Desktop stays host (ADR 0011).
+**Expert:** Yes as a **phone-stt-source** when armed — transcript merges into the desktop session. Desktop stays LLM/planner host (ADR 0015). Phone can also be a **phone-control-surface** for transport / end / Ask.
 
 ## Flagged ambiguities
 

@@ -96,8 +96,15 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                                 <span className="opacity-80 tracking-wide">{t('Hide')}</span>
                             </div>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
-                                <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
+                            <div className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-white/12">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface text-red-400 bg-red-500/10" style={appearance.iconStyle} title={t('Pause listening')}>
+                                    <div className="w-3 h-3 rounded-[2.5px] bg-red-400 opacity-90" />
+                                </div>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle} title={t('End meeting')}>
+                                    <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
+                                        <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -139,7 +146,7 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                 <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                                <Zap className="w-3 h-3 opacity-70" /> {t('Ask')}
                             </div>
                         </div>
 
@@ -2621,6 +2628,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <div>
                                             <div className="mb-3">
                                                 <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
+                                                <p className="text-[11px] text-text-tertiary mt-1 leading-relaxed">
+                                                    {t('Ask / Submit sends a question to the AI. It does not start listening — use the red square on the overlay to pause or resume STT. The triangle ends the meeting.')}
+                                                </p>
                                             </div>
                                             <div className="space-y-1">
                                                 {[
