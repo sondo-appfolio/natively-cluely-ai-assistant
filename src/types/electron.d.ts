@@ -380,6 +380,10 @@ export interface ElectronAPI {
   onListenTransportChanged: (
     callback: (data: { state: string; captureShouldRun: boolean; reason: string }) => void,
   ) => () => void
+  getUserSttSource: () => Promise<{ source: string; label: string }>
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => () => void
   debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
     => Promise<{ success: boolean; injected?: number; error?: string }>
   finalizeMicSTT: () => Promise<void>

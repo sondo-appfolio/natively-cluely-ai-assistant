@@ -1186,6 +1186,16 @@ import {
   type ListenTransportSnapshot,
 } from "./audio/listenTransport"
 import {
+  armDesktopUserSttSource,
+  armPhoneUserSttSource,
+  disarmUserSttSource,
+  labelUserSttSource,
+  planPhoneSttIngest,
+  releasePhoneUserSttSource,
+  shouldAcceptUserSttFrom,
+  type UserSttSource,
+} from "./audio/userSttSource"
+import {
   resolveLiveSttSandboxStart,
   wireLiveSttSandbox,
 } from "./audio/liveSttSandbox"
@@ -1399,6 +1409,13 @@ export class AppState {
     captureShouldRun: false,
     reason: 'idle',
   };
+  /**
+   * Active user-speech STT source (ADR 0015 / phone-stt-source).
+   * Last-armed wins; desktop user-mic chunks are ignored while phone is active
+   * (safer than tearing down capture mid-meeting). Interviewer/system STT is
+   * unaffected.
+   */
+  private _userSttSource: UserSttSource = 'none';
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -2308,6 +2325,66 @@ export class AppState {
     this._listenTransport = snap;
     this.broadcastListenTransport();
     this.broadcastMeetingState();
+  }
+
+  public getUserSttSource(): UserSttSource {
+    return this._userSttSource;
+  }
+
+  private applyUserSttSource(source: UserSttSource): UserSttSource {
+    this._userSttSource = source;
+    this.broadcast('user-stt-source-changed', {
+      source,
+      label: labelUserSttSource(source),
+    });
+    return source;
+  }
+
+  /** Phone Mirror: arm phone as the sole active user-speech STT source. */
+  public armPhoneUserStt(): UserSttSource {
+    return this.applyUserSttSource(armPhoneUserSttSource(this._userSttSource));
+  }
+
+  /** Phone Mirror: release phone arm; restore desktop mic as user source. */
+  public disarmPhoneUserStt(): UserSttSource {
+    return this.applyUserSttSource(releasePhoneUserSttSource(this._userSttSource));
+  }
+
+  /**
+   * Merge a phone STT transcript into the desktop session + overlay live
+   * transcript when phone is the active user source. Desktop remains LLM host.
+   */
+  public ingestPhoneSttTranscript(text: string, final?: boolean): { accepted: boolean } {
+    const plan = planPhoneSttIngest(this._userSttSource, text, final);
+    if (!plan.accept || !plan.text) return { accepted: false };
+    if (!this.isMeetingActive && !this._isDraining) return { accepted: false };
+
+    const isFinal = plan.final !== false;
+    this.intelligenceManager.handleTranscript({
+      speaker: 'user',
+      text: plan.text,
+      timestamp: Date.now(),
+      final: isFinal,
+      confidence: 0.9,
+      origin: 'stt',
+    });
+
+    if (isFinal && this.ragManager) {
+      this.ragManager.feedLiveTranscript([{
+        speaker: 'user',
+        text: plan.text,
+        timestamp: Date.now(),
+      }]);
+    }
+
+    this.sendThrottledTranscript({
+      speaker: 'user',
+      text: plan.text,
+      timestamp: Date.now(),
+      final: isFinal,
+      confidence: 0.9,
+    });
+    return { accepted: true };
   }
 
   /** Stop mic/system capture + STT without ending the meeting (red-square pause). */
@@ -3248,6 +3325,16 @@ export class AppState {
       // window between Stop click and STT socket close so the user's last
       // sentence isn't silently dropped.
       if (!this.isMeetingActive && !this._isDraining) {
+        return;
+      }
+
+      // phone-stt-source (ADR 0015): ignore desktop user-mic while phone is
+      // the active user-speech source. Prefer ignore over tearing down capture
+      // mid-meeting. Interviewer/system STT is never gated here.
+      if (
+        speaker === 'user' &&
+        !shouldAcceptUserSttFrom(this._userSttSource, 'desktop')
+      ) {
         return;
       }
 
@@ -5843,6 +5930,8 @@ export class AppState {
           sttReady: this.isSttReadyForListenTransport(),
         });
         this.applyListenTransportSnapshot(transportSnap);
+        // Default user-speech STT to desktop mic; phone may last-arm later.
+        this.applyUserSttSource(armDesktopUserSttSource(this._userSttSource));
 
         if (transportSnap.reason === 'ambient') {
           console.warn('[Main] Meeting starting WITHOUT audio capture — Ambient AI Chat is ON (Settings > General). Transcript, summary and usage will be empty for this meeting.');
@@ -6023,6 +6112,7 @@ export class AppState {
     this._meetingGeneration++;
     this._isDraining = true;
     this.applyListenTransportSnapshot(listenTransportOnMeetingEnd());
+    this.applyUserSttSource(disarmUserSttSource(this._userSttSource));
     this.broadcastMeetingState();
 
     // ─── ABORT + AWAIT IN-FLIGHT AUDIO INIT (before any capture teardown) ───

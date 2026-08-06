@@ -1021,6 +1021,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     captureShouldRun: boolean;
     reason: string;
   }>({ state: 'idle', captureShouldRun: false, reason: 'idle' });
+  // phone-stt-source: which device owns user-speech STT (last-armed wins).
+  const [userSttSource, setUserSttSource] = useState<{
+    source: string;
+    label: string;
+  }>({ source: 'none', label: 'None' });
   // always-on-live-transcript: ref so transcript IPC handler sees armed state
   // without re-subscribing (same stale-closure pattern as isRecordingRef).
   const listenArmedRef = useRef(false);
@@ -2705,6 +2710,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }).catch(() => {});
     const unsub = window.electronAPI?.onListenTransportChanged?.((snap) => {
       setListenTransport(snap);
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI?.getUserSttSource?.().then((snap) => {
+      if (!cancelled && snap) setUserSttSource(snap);
+    }).catch(() => {});
+    const unsub = window.electronAPI?.onUserSttSourceChanged?.((snap) => {
+      setUserSttSource(snap);
     });
     return () => {
       cancelled = true;
@@ -7480,7 +7499,10 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible;
+  const showUserSttSourcePill =
+    userSttSource.source === 'desktop' || userSttSource.source === 'phone';
+  const hasStatusPill =
+    shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible || showUserSttSourcePill;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -7652,6 +7674,20 @@ Provide only the answer, nothing else.`;
                   >
                     <Mic className="h-3 w-3 opacity-70" />
                     <span>{sttSummary.label}</span>
+                  </div>
+                )}
+                {showUserSttSourcePill && (
+                  <div
+                    className={`${statusPillBaseClass} ${
+                      userSttSource.source === 'phone'
+                        ? getStatusToneClass('ok')
+                        : ''
+                    }`}
+                    data-testid="user-stt-source-pill"
+                    title="Active user-speech STT source (last-armed wins)"
+                  >
+                    <Mic className="h-3 w-3 opacity-70" />
+                    <span>{userSttSource.label}</span>
                   </div>
                 )}
                 <SdRequirementsGateStrip

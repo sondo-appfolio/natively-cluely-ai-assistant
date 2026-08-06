@@ -11,8 +11,12 @@ import { AppState } from './main';
 import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
-import { formatListenTransportAck } from './services/phoneMirrorCommands';
+import {
+  formatListenTransportAck,
+  formatPhoneSttAck,
+} from './services/phoneMirrorCommands';
 import type { PhoneCommand } from './services/phoneMirrorCommands';
+import { labelUserSttSource } from './audio/userSttSource';
 import {
   TwoDeviceStealthSession,
   type TwoDeviceStealthHost,
@@ -8158,6 +8162,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // phone-stt-source — active user-speech STT device (desktop | phone | none).
+  safeHandle('user-stt-source:get', async () => {
+    const source = appState.getUserSttSource();
+    return { source, label: labelUserSttSource(source) };
+  });
+
   // TEST-TRANSCRIPT INJECTION (deep-run 2 issue 10, 2026-08-01). The all-files
   // stress run could never score a single team-meet transcript question: with
   // no live audio there is NO way to get spoken turns into a session, so every
@@ -12260,6 +12270,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch (e: any) {
         console.error('[PhoneMirror] end-meeting failed:', e);
         phoneMirror.publishAck('end-meeting', e?.message || 'End meeting failed');
+      }
+    } else if (cmd.type === 'phone-stt') {
+      // Arm/disarm phone as user-speech STT source (last-armed wins; ADR 0015).
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        const source =
+          cmd.op === 'arm' ? appState.armPhoneUserStt() : appState.disarmPhoneUserStt();
+        const ack = formatPhoneSttAck(cmd.op, source);
+        phoneMirror.publishAck(ack.action, ack.message);
+      } catch (e: any) {
+        console.error('[PhoneMirror] phone-stt failed:', e);
+        phoneMirror.publishAck(
+          `phone-stt:${cmd.op}`,
+          e?.message || 'Phone STT failed',
+        );
+      }
+    } else if (cmd.type === 'phone-stt-transcript') {
+      // Merge phone finals/partials into desktop session when phone is active
+      // source. No toast ack — continuous recognition would spam the phone UI.
+      try {
+        appState.ingestPhoneSttTranscript(cmd.text, cmd.final);
+      } catch (e: any) {
+        console.error('[PhoneMirror] phone-stt-transcript failed:', e);
       }
     }
   });

@@ -651,6 +651,10 @@ interface ElectronAPI {
   onListenTransportChanged: (
     callback: (data: { state: string; captureShouldRun: boolean; reason: string }) => void,
   ) => () => void;
+  getUserSttSource: () => Promise<{ source: string; label: string }>;
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => () => void;
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
@@ -1851,6 +1855,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('listen-transport-changed', subscription);
     return () => {
       ipcRenderer.removeListener('listen-transport-changed', subscription);
+    };
+  },
+  getUserSttSource: () => ipcRenderer.invoke('user-stt-source:get'),
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => {
+    const subscription = (_: any, data: { source: string; label: string }) => callback(data);
+    ipcRenderer.on('user-stt-source-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('user-stt-source-changed', subscription);
     };
   },
   debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>) =>
