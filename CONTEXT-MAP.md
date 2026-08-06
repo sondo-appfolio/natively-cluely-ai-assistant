@@ -5,7 +5,7 @@
 - [Commercial surface strip](./CONTEXT.md) — fork monetization chrome removal; Pro unlock / BYOK kept
 - [Speakable system design](./docs/speakable-sd/CONTEXT.md) — SD interview answers as read-aloud Delivery Framework talk (no DSA code dumps); includes **SD route** terms for `system_design_answer` classification
 - [Natively iOS Stealth Mode client](./docs/standalone-ios/CONTEXT.md) — InterviewMan-like phone client paired with desktop via Phone Mirror (not standalone listen→LLM)
-- [InterviewMan listen parity](./docs/interviewman-listen/CONTEXT.md) — desktop always-on live STT, red-square transport, triangle end-meeting, Settings live-STT sandbox; phone STT source + control via Phone Mirror (see `.scratch/interviewman-listen/`)
+- [InterviewMan listen parity](./docs/interviewman-listen/CONTEXT.md) — desktop always-on live STT, red-square live-STT transport, bottom Ask bar (Think / type / ↑), triangle end-meeting, Settings live-STT sandbox; phone STT source + control via Phone Mirror (see `.scratch/interviewman-listen/`)
 
 ## Relationships
 

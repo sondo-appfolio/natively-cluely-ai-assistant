@@ -46,8 +46,8 @@ export const SHORTCUTS_SHEET_CATALOG: ShortcutsSheetCatalogEntry[] = [
   },
   {
     id: 'recording',
-    title: 'Start/Stop Recording',
-    description: 'Start or stop audio recording for transcription',
+    title: 'Focus Ask Bar',
+    description: 'Focus the bottom Ask bar (Think / type / ↑). Live STT is the red square.',
     icon: 'mic',
     keybindIds: ['chat:answer'],
   },

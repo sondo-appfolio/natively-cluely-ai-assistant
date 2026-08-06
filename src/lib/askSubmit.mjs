@@ -1,13 +1,14 @@
 /**
- * Ask/submit policy (InterviewMan control map / ADR 0014).
+ * Bottom Ask bar policy (InterviewMan control map / ADR 0014 amend).
  *
- * Spoken or typed words → an AI turn. Never arms, pauses, or resumes listen
- * transport — that is red-square only (`toggleListenTransport`).
+ * Think → What-to-Answer; typed ↑ → AI ask turn; chat:answer → focus bar.
+ * Never arms, pauses, or resumes listen transport — red-square only.
+ * Never arms a separate Ask mic buffer (Ask chip removed).
  *
- * Glossary: interviewman-control-map, Ask/submit
+ * Glossary: bottom-ask-bar, think-vs-assist-controls, red-square-live-stt-transport
  */
 
-/** Effects that belong to listen transport — forbidden on the Ask/submit path. */
+/** Effects that belong to listen transport — forbidden on the Ask-bar path. */
 export const LISTEN_TRANSPORT_EFFECTS = Object.freeze([
   'toggleListenTransport',
   'listenTransportPause',
@@ -16,26 +17,50 @@ export const LISTEN_TRANSPORT_EFFECTS = Object.freeze([
 ]);
 
 /**
- * @param {{ isVoiceCaptureArmed: boolean, hasQuestionOrAttachments: boolean }} input
- * @returns {{ action: 'arm_voice_capture' | 'submit' | 'empty_speech_error', effects: readonly string[] }}
+ * @param {{
+ *   intent: 'think' | 'submit_typed' | 'focus_bar',
+ *   hasQuestionOrAttachments?: boolean,
+ * }} input
+ * @returns {{
+ *   action: 'think' | 'submit' | 'empty_error' | 'focus_bar',
+ *   effects: readonly string[],
+ * }}
  */
-export function planAskSubmitAction({ isVoiceCaptureArmed, hasQuestionOrAttachments }) {
-  if (!isVoiceCaptureArmed) {
+export function planBottomAskBarAction({ intent, hasQuestionOrAttachments = false }) {
+  if (intent === 'think') {
     return {
-      action: 'arm_voice_capture',
-      effects: Object.freeze(['startManualVoiceCapture']),
+      action: 'think',
+      effects: Object.freeze(['runWhatToAnswer']),
     };
   }
+  if (intent === 'focus_bar') {
+    return {
+      action: 'focus_bar',
+      effects: Object.freeze(['focusBottomAskBar']),
+    };
+  }
+  // submit_typed
   if (!hasQuestionOrAttachments) {
     return {
-      action: 'empty_speech_error',
-      effects: Object.freeze(['showEmptySpeechError']),
+      action: 'empty_error',
+      effects: Object.freeze(['showEmptyAskError']),
     };
   }
   return {
     action: 'submit',
-    effects: Object.freeze(['finalizeMicSTT', 'streamChatOrRag']),
+    effects: Object.freeze(['streamChatOrRag']),
   };
+}
+
+/** @deprecated Use planBottomAskBarAction — kept briefly for call-site migration. */
+export function planAskSubmitAction({ isVoiceCaptureArmed, hasQuestionOrAttachments }) {
+  if (!isVoiceCaptureArmed) {
+    return planBottomAskBarAction({ intent: 'focus_bar' });
+  }
+  return planBottomAskBarAction({
+    intent: 'submit_typed',
+    hasQuestionOrAttachments,
+  });
 }
 
 /** True when any planned effect would arm/disarm listen transport. */

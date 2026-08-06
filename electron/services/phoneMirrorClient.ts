@@ -344,7 +344,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           <button class="qa-btn" data-action="codeHint" type="button">Code Hint</button>
           <button class="qa-btn" data-action="clarify" type="button">Clarify</button>
           <button class="qa-btn" data-action="brainstorm" type="button">Brainstorm</button>
-          <button class="qa-btn" id="askSubmitBtn" type="button" title="Ask/submit — typed message or Answer chip on desktop">Ask/Submit</button>
+          <button class="qa-btn" id="askSubmitBtn" type="button" title="Ask bar — typed message submits; empty focuses desktop Ask bar">Ask</button>
           <button class="qa-btn" data-action="followUp" type="button">Follow Up</button>
           <button class="qa-btn" data-action="dynamicAction4" type="button">Recap</button>
           <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button" title="Capture desktop screenshot for AI prompt">📷 Capture</button>
