@@ -17,6 +17,30 @@ export function shouldKeepUserMicChunk({ listenArmed, isManualRecording }) {
 }
 
 /**
+ * Whether the overlay should mount the live-transcript surface.
+ *
+ * Always-on-live-transcript: while listen transport is armed and the interviewer
+ * transcript preference is on, show the surface even before the first STT token
+ * (RollingTranscript renders "Listening…" for empty text).
+ *
+ * @param {{
+ *   showTranscriptPreference: boolean,
+ *   listenArmed: boolean,
+ *   hasRollingText: boolean,
+ * }} input
+ * @returns {boolean}
+ */
+export function shouldShowLiveTranscriptSurface({
+  showTranscriptPreference,
+  listenArmed,
+  hasRollingText,
+}) {
+  if (!showTranscriptPreference) return false;
+  if (listenArmed === true) return true;
+  return hasRollingText === true;
+}
+
+/**
  * @param {{
  *   speaker: string,
  *   listenArmed: boolean,
