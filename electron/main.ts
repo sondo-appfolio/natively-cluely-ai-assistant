@@ -1179,6 +1179,12 @@ import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
+import {
+  listenTransportOnMeetingStart,
+  listenTransportOnMeetingEnd,
+  listenTransportToggle,
+  type ListenTransportSnapshot,
+} from "./audio/listenTransport"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
@@ -1383,6 +1389,12 @@ export class AppState {
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
   private _ambientChatEnabled: boolean = false;
+  /** InterviewMan listen transport — armed/paused/unready/idle (ADR 0014). */
+  private _listenTransport: ListenTransportSnapshot = {
+    state: 'idle',
+    captureShouldRun: false,
+    reason: 'idle',
+  };
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -2264,7 +2276,77 @@ export class AppState {
   }
 
   private broadcastMeetingState(): void {
-    this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
+    this.broadcast('meeting-state-changed', {
+      isActive: this.isMeetingActive,
+      listenTransport: this._listenTransport,
+    });
+  }
+
+  private broadcastListenTransport(): void {
+    this.broadcast('listen-transport-changed', this._listenTransport);
+  }
+
+  /** STT ready for listen-transport arming: any configured provider except `none`. */
+  private isSttReadyForListenTransport(): boolean {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getSttProvider() !== 'none';
+    } catch {
+      return false;
+    }
+  }
+
+  public getListenTransport(): ListenTransportSnapshot {
+    return this._listenTransport;
+  }
+
+  private applyListenTransportSnapshot(snap: ListenTransportSnapshot): void {
+    this._listenTransport = snap;
+    this.broadcastListenTransport();
+    this.broadcastMeetingState();
+  }
+
+  /** Stop mic/system capture + STT without ending the meeting (red-square pause). */
+  private async stopListenCapturePipelines(): Promise<void> {
+    try { this.googleSTT?.stop(); } catch (e) { console.warn('[Main] listen pause: googleSTT.stop', e); }
+    try { this.googleSTT_User?.stop(); } catch (e) { console.warn('[Main] listen pause: googleSTT_User.stop', e); }
+    try { await this.microphoneCapture?.stop(); } catch (e) { console.warn('[Main] listen pause: mic.stop', e); }
+    try { await this.systemAudioCapture?.stop(); } catch (e) { console.warn('[Main] listen pause: system.stop', e); }
+  }
+
+  /** Re-start capture + STT for an active meeting (red-square resume). */
+  private async startListenCapturePipelines(): Promise<void> {
+    if (!this.isMeetingActive || this._ambientChatEnabled) return;
+    await this.setupSystemAudioPipeline();
+    this.microphoneCapture?.start();
+    this.googleSTT_User?.start();
+    this.systemAudioCapture?.start();
+    this.googleSTT?.start();
+  }
+
+  /**
+   * Red-square transport toggle: pause/resume listen without ending the meeting.
+   * Ambient sessions stay capture-off; unready can arm once STT becomes ready.
+   */
+  public async toggleListenTransport(): Promise<ListenTransportSnapshot> {
+    if (!this.isMeetingActive) {
+      return this._listenTransport;
+    }
+    if (this._ambientChatEnabled && this._listenTransport.reason === 'ambient') {
+      return this._listenTransport;
+    }
+    const next = listenTransportToggle(
+      this._listenTransport.state,
+      this.isSttReadyForListenTransport(),
+    );
+    const wasRunning = this._listenTransport.captureShouldRun;
+    this.applyListenTransportSnapshot(next);
+    if (wasRunning && !next.captureShouldRun) {
+      await this.stopListenCapturePipelines();
+    } else if (!wasRunning && next.captureShouldRun) {
+      await this.startListenCapturePipelines();
+    }
+    return this._listenTransport;
   }
 
   // Public so the reference-file upload IPC handler can kick a retry for a
@@ -5622,24 +5704,24 @@ export class AppState {
         return;
       }
       try {
-        // Ambient AI Chat (Settings > General): audio capture is the ONLY
-        // thing this setting changes. Everything else about a meeting —
-        // window, persistence, RAG, quick actions — proceeds identically;
-        // skipping reconfigureAudio()/setupSystemAudioPipeline() here just
-        // means systemAudioCapture/microphoneCapture/googleSTT/googleSTT_User
-        // stay whatever they already were (null on a clean boot or after a
-        // prior meeting's teardown), so the start() calls below are already
-        // safe no-ops via `?.` — no other code path needs to know about this.
-        if (this._ambientChatEnabled) {
-          // Loud, unambiguous marker. On 2026-07-30 this flag flipped on and
-          // every meeting for the next five hours persisted with an empty
-          // transcript and a skeleton summary — 15 meetings of silent data
-          // loss that read as "meeting notes are broken". If capture is
-          // intentionally off, the log should say so at the exact moment a
-          // meeting starts without it.
+        // Listen transport (InterviewMan parity): decide arm / Ambient skip /
+        // STT-unready before touching capture. Capture runs only when
+        // captureShouldRun is true — never a fake empty “listening” stream
+        // when STT provider is `none`.
+        const transportSnap = listenTransportOnMeetingStart({
+          ambientChatEnabled: this._ambientChatEnabled,
+          sttReady: this.isSttReadyForListenTransport(),
+        });
+        this.applyListenTransportSnapshot(transportSnap);
+
+        if (transportSnap.reason === 'ambient') {
           console.warn('[Main] Meeting starting WITHOUT audio capture — Ambient AI Chat is ON (Settings > General). Transcript, summary and usage will be empty for this meeting.');
+          console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
+        } else if (transportSnap.reason === 'stt_unready') {
+          console.warn('[Main] Meeting starting with listen transport unready — STT provider is none/unconfigured. Capture skipped; open Settings Audio to configure.');
         }
-        if (!this._ambientChatEnabled) {
+
+        if (transportSnap.captureShouldRun) {
           // Check for audio configuration preference
           if (metadata?.audio) {
             await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
@@ -5680,8 +5762,6 @@ export class AppState {
           this.systemAudioCapture?.start();
           this.googleSTT?.start();
           systemSttStartedByInit = true;
-        } else {
-          console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
         }
 
         // Start JIT RAG live indexing
@@ -5812,6 +5892,7 @@ export class AppState {
     this.isMeetingActive = false;
     this._meetingGeneration++;
     this._isDraining = true;
+    this.applyListenTransportSnapshot(listenTransportOnMeetingEnd());
     this.broadcastMeetingState();
 
     // ─── ABORT + AWAIT IN-FLIGHT AUDIO INIT (before any capture teardown) ───
@@ -6129,7 +6210,15 @@ export class AppState {
       // and mode switches, so a minutes-old answer appeared with no marker of
       // what it answered (the live "late CGPA answer" report). The renderer
       // uses this stamp to drop or visibly label stale finals.
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge', emittedAt: Date.now() })
+      this.sendToWindow(win, 'intelligence-suggested-answer', {
+        answer,
+        question,
+        confidence,
+        generationId,
+        sourceLabel: sourceLabel ?? 'General knowledge',
+        emittedAt: Date.now(),
+        triggerSource: this.intelligenceManager.getWtaTriggerSourceForGeneration?.(generationId),
+      })
 
     })
 
@@ -7815,6 +7904,14 @@ if (process.env.THINKING_MATRIX === '1') {
   // use, so this only moves startup CPU work out of the visible launch path.
   setTimeout(() => {
     try {
+      const { verifyRequiredModelAssets } = require('./services/LocalFallbackAssets');
+      const classifierInstalled = verifyRequiredModelAssets()
+        .filter((asset: { id: string }) => asset.id.startsWith('mobilebert-'))
+        .every((asset: { ok: boolean }) => asset.ok);
+      if (!classifierInstalled) {
+        console.log('[Init] Optional intent classifier model not installed; warmup skipped');
+        return;
+      }
       warmupIntentClassifier();
     } catch (err) {
       console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);

@@ -1014,6 +1014,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
+  const [listenTransport, setListenTransport] = useState<{
+    state: string;
+    captureShouldRun: boolean;
+    reason: string;
+  }>({ state: 'idle', captureShouldRun: false, reason: 'idle' });
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
@@ -2674,6 +2679,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         overlayOpacity,
         themeMode: isLightTheme ? 'light' : 'dark',
         interfaceTheme: isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default',
+        listenArmed: listenTransport.state === 'armed',
       })
       .catch(() => {});
   }, [
@@ -2684,7 +2690,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     isLightTheme,
     isGlassTheme,
     isModernTheme,
+    listenTransport.state,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI?.getListenTransport?.().then((snap) => {
+      if (!cancelled && snap) setListenTransport(snap);
+    }).catch(() => {});
+    const unsub = window.electronAPI?.onListenTransportChanged?.((snap) => {
+      setListenTransport(snap);
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onOverlayUiAction?.((action) => {
@@ -2698,6 +2719,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         case 'end-meeting':
           if (onEndMeeting) onEndMeeting();
           else window.electronAPI.quitApp();
+          break;
+        case 'toggle-listen-transport':
+          window.electronAPI?.toggleListenTransport?.().catch(() => {});
           break;
       }
     });
@@ -7945,6 +7969,25 @@ Provide only the answer, nothing else.`;
                   void handleWhatToSay(action.promptInstruction);
                 }}
               />
+
+              {/* Listen transport unready — STT not configured; do not fake listening. */}
+              {listenTransport.state === 'unready' ? (
+                <div
+                  className="mx-3 mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] overlay-text-primary flex items-center gap-2"
+                  data-testid="listen-transport-unready"
+                >
+                  <span className="flex-1">
+                    Listening is not ready — configure speech-to-text in Settings, then resume with the red square.
+                  </span>
+                  <button
+                    type="button"
+                    className="shrink-0 underline opacity-90 hover:opacity-100"
+                    onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
+                  >
+                    Open Settings
+                  </button>
+                </div>
+              ) : null}
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics
                   for hard failures. Reconnecting/awaiting-audio status is owned by

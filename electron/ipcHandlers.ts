@@ -29,6 +29,7 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, resolveStructureValidationType, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, applySpeakableSdIfNeeded, mayCompressToSpeakable, type ExplicitCodingContract, type AnswerType } from './llm';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
+import { mintTurnId } from './llm/turnIdentity';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { stripEmbeddedAnswerContract } from './llm/stripEmbeddedAnswerContract';
@@ -6698,7 +6699,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const creds = CredentialsManager.getInstance().getAllCredentials();
+      const cm = CredentialsManager.getInstance();
+      const creds = cm.getAllCredentials();
 
       // Return masked versions for security (just indicate if set)
       const hasKey = (key?: string) => !!(key && key.trim().length > 0);
@@ -6747,6 +6749,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
+        cloudFetchedModels: cm.getAllCloudFetchedModels?.() || creds.cloudFetchedModels || {},
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -7969,6 +7972,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
+      // gemini-selection-sticky: overlay picks must survive restart (same persistence
+      // as Settings set-default-model).
+      cm.setDefaultModel(modelId);
+
       // Get all providers (Curl + Custom)
       const curlProviders = cm.getCurlProviders();
       const legacyProviders = cm.getCustomProviders() || [];
@@ -8120,6 +8127,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('Error ending meeting:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // InterviewMan listen transport — red-square pause/resume (does not end meeting).
+  safeHandle('listen-transport:get', async () => {
+    return appState.getListenTransport();
+  });
+
+  safeHandle('listen-transport:toggle', async () => {
+    try {
+      const snap = await appState.toggleListenTransport();
+      return { success: true, listenTransport: snap };
+    } catch (error: any) {
+      console.error('Error toggling listen transport:', error);
+      return { success: false, error: error?.message };
     }
   });
 
@@ -8583,8 +8605,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         domContext?: string;
         domContextEnvelope?: unknown;
         sdRequirementsUiAdvance?: boolean;
+        triggerSource?: 'human-observer-suggestion';
       },
     ) => {
+      const triggerSource =
+        options?.triggerSource === 'human-observer-suggestion'
+          ? ('human-observer-suggestion' as const)
+          : undefined;
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -8610,6 +8637,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               question: question || 'unknown',
               screenContextStatus,
               error: 'Invalid image path payload',
+              triggerSource,
             };
           }
 
@@ -8754,6 +8782,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
             domContext: effectiveDomContext,
             sdRequirementsUiAdvance: options?.sdRequirementsUiAdvance === true,
+            ...(triggerSource ? { triggerSource } : {}),
           },
         );
         if (answer) {
@@ -8775,6 +8804,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           visionFailureReason,
           imageCount: validatedImagePaths?.length || 0,
           usedImageInput: Boolean(validatedImagePaths?.length),
+          triggerSource:
+            triggerSource ||
+            intelligenceManager.getLastWtaTriggerSource?.() ||
+            undefined,
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
@@ -8782,6 +8815,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
+          triggerSource,
         };
       }
     },

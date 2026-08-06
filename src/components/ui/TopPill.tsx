@@ -5,7 +5,12 @@ import type { OverlayAppearance } from "../../lib/overlayAppearance";
 interface TopPillProps {
     expanded: boolean;
     onToggle: () => void;
-    onQuit: () => void;
+    /** Red-square listen transport toggle (pause/resume). Does not end the meeting. */
+    onToggleListen: () => void;
+    /** Triangle end-meeting. */
+    onEndMeeting: () => void;
+    /** When true, red square shows as “listening” (armed). */
+    listenArmed?: boolean;
     appearance: OverlayAppearance;
     onLogoClick?: () => void;
 }
@@ -13,7 +18,9 @@ interface TopPillProps {
 export default function TopPill({
     expanded,
     onToggle,
-    onQuit,
+    onToggleListen,
+    onEndMeeting,
+    listenArmed = false,
     appearance,
     onLogoClick,
 }: TopPillProps) {
@@ -85,9 +92,33 @@ export default function TopPill({
                     <span className="tracking-wide opacity-80 group-hover:opacity-100">{expanded ? "Hide" : "Show"}</span>
                 </button>
 
-                {/* STOP / QUIT BUTTON */}
+                {/* RED SQUARE — listen transport pause/resume (ADR 0014) */}
                 <button
-                    onClick={onQuit}
+                    type="button"
+                    onClick={onToggleListen}
+                    title={listenArmed ? "Pause listening" : "Resume listening"}
+                    aria-label={listenArmed ? "Pause listening" : "Resume listening"}
+                    className={`
+            w-7 h-7
+            rounded-full
+            overlay-icon-surface
+            flex items-center justify-center
+            interaction-base interaction-press
+            ${listenArmed
+              ? 'text-red-400 hover:bg-red-500/15'
+              : 'overlay-text-primary hover:bg-red-500/10 hover:text-red-400 opacity-70'}
+          `}
+                    style={appearance.iconStyle}
+                >
+                    <div className="w-3.5 h-3.5 rounded-[3px] bg-current opacity-80" />
+                </button>
+
+                {/* TRIANGLE — end meeting */}
+                <button
+                    type="button"
+                    onClick={onEndMeeting}
+                    title="End meeting"
+                    aria-label="End meeting"
                     className={`
             w-7 h-7
             rounded-full
@@ -95,11 +126,20 @@ export default function TopPill({
             overlay-text-primary
             flex items-center justify-center
             interaction-base interaction-press
-            hover:bg-red-500/10 hover:text-red-400
+            hover:bg-white/10
           `}
                     style={appearance.iconStyle}
                 >
-                    <div className="w-3.5 h-3.5 rounded-[3px] bg-current opacity-80" />
+                    <div
+                        className="opacity-80"
+                        style={{
+                            width: 0,
+                            height: 0,
+                            borderLeft: '5px solid transparent',
+                            borderRight: '5px solid transparent',
+                            borderTop: '8px solid currentColor',
+                        }}
+                    />
                 </button>
             </div>
         </div>
