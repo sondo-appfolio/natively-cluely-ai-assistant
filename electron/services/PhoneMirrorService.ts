@@ -1421,9 +1421,14 @@ export class PhoneMirrorService {
 
         if (validated) {
           const label =
-            validated.type === 'two-device-stealth'
+            validated.type === 'two-device-stealth' ||
+            validated.type === 'listen-transport'
               ? `${validated.type}:${validated.op}`
-              : validated.type;
+              : validated.type === 'ask-submit'
+                ? validated.message
+                  ? 'ask-submit:message'
+                  : 'ask-submit'
+                : validated.type;
           console.log(`[PhoneMirror] phone command: ${label}`);
           this.emitPhoneCommand(validated);
         }

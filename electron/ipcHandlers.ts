@@ -11,6 +11,8 @@ import { AppState } from './main';
 import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
+import { formatListenTransportAck } from './services/phoneMirrorCommands';
+import type { PhoneCommand } from './services/phoneMirrorCommands';
 import {
   TwoDeviceStealthSession,
   type TwoDeviceStealthHost,
@@ -11881,8 +11883,38 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Route commands sent by the phone browser back to the Electron renderer so
   // the existing action system (global-shortcut events, chat stream) handles
   // them without duplicating logic.
-  PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
+  PhoneMirrorService.getInstance().onPhoneCommand(async (rawCmd) => {
     const win = appState.getMainWindow();
+
+    // Ask/submit (ticket 06): optional message → same desktop LLM chat host path;
+    // no message → Answer chip via global-shortcut. Desktop remains LLM host (ADR 0015).
+    let cmd: PhoneCommand = rawCmd;
+    if (rawCmd.type === 'ask-submit') {
+      const phoneMirror = PhoneMirrorService.getInstance();
+      if (rawCmd.message) {
+        phoneMirror.publishAck('ask-submit', 'Ask submitted');
+        cmd = { type: 'chat', message: rawCmd.message };
+      } else {
+        try {
+          const helper = appState.getWindowHelper();
+          const sent = new Set<number>();
+          for (const w of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+            if (!w || w.isDestroyed() || sent.has(w.id)) continue;
+            sent.add(w.id);
+            try {
+              w.webContents.send('global-shortcut', { action: 'answer' });
+            } catch {
+              // Window is tearing down; keep delivering to any other valid surface.
+            }
+          }
+          phoneMirror.publishAck('ask-submit', 'Ask/submit');
+        } catch (e: any) {
+          console.error('[PhoneMirror] ask-submit failed:', e);
+          phoneMirror.publishAck('ask-submit', e?.message || 'Ask/submit failed');
+        }
+        return;
+      }
+    }
 
     if (cmd.type === 'action') {
       // Re-use the same global-shortcut dispatch path the keyboard uses.
@@ -12193,6 +12225,41 @@ export function initializeIpcHandlers(appState: AppState): void {
           `two-device-stealth:${cmd.op}`,
           e?.message || 'Two-device stealth failed',
         );
+      }
+    } else if (cmd.type === 'listen-transport') {
+      // Red-square pause/resume via getListenTransport + toggle (ticket 06).
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        const current = appState.getListenTransport();
+        let shouldToggle = false;
+        if (cmd.op === 'toggle') {
+          shouldToggle = true;
+        } else if (cmd.op === 'pause') {
+          shouldToggle = current.state === 'armed';
+        } else if (cmd.op === 'resume') {
+          shouldToggle = current.state === 'paused' || current.state === 'unready';
+        }
+        const snap = shouldToggle
+          ? await appState.toggleListenTransport()
+          : current;
+        const ack = formatListenTransportAck(cmd.op, snap.state);
+        phoneMirror.publishAck(ack.action, ack.message);
+      } catch (e: any) {
+        console.error('[PhoneMirror] listen-transport failed:', e);
+        phoneMirror.publishAck(
+          `listen-transport:${cmd.op}`,
+          e?.message || 'Listen transport failed',
+        );
+      }
+    } else if (cmd.type === 'end-meeting') {
+      // Triangle equivalent — end meeting without two-device stealth session dance.
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        await appState.endMeeting();
+        phoneMirror.publishAck('end-meeting', 'Meeting ended');
+      } catch (e: any) {
+        console.error('[PhoneMirror] end-meeting failed:', e);
+        phoneMirror.publishAck('end-meeting', e?.message || 'End meeting failed');
       }
     }
   });
