@@ -615,6 +615,21 @@ interface ElectronAPI {
   // emitted during the same startAudioTest lifecycle.
   onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
   onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
+  // Settings Audio live-STT sandbox (real transcript stream).
+  startLiveSttSandbox: (deviceId?: string) => Promise<{
+    success: boolean;
+    reason?: 'stt_unready' | string;
+    error?: string;
+  }>;
+  stopLiveSttSandbox: () => Promise<{ success: boolean }>;
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => () => void;
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
@@ -2216,6 +2231,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audio-test-system-error', subscription);
     return () => {
       ipcRenderer.removeListener('audio-test-system-error', subscription);
+    };
+  },
+  // Settings Audio live-STT sandbox — real partial/final transcript text.
+  startLiveSttSandbox: (deviceId?: string) =>
+    ipcRenderer.invoke('start-live-stt-sandbox', deviceId),
+  stopLiveSttSandbox: () => ipcRenderer.invoke('stop-live-stt-sandbox'),
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => {
+    const subscription = (_: any, payload: {
+      text: string;
+      final: boolean;
+      confidence?: number;
+      speaker: 'user';
+      timestamp: number;
+    }) => callback(payload);
+    ipcRenderer.on('audio-test-transcript', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-transcript', subscription);
+    };
+  },
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => {
+    const subscription = (_: any, errorMessage: string) => callback(errorMessage);
+    ipcRenderer.on('audio-test-transcript-error', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-transcript-error', subscription);
     };
   },
 

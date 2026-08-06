@@ -508,6 +508,22 @@ export interface ElectronAPI {
   // the same startAudioTest lifecycle.
   onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
   onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
+  // Settings Audio live-STT sandbox — real partial/final transcript text
+  // (not levels / credential ping). reason=stt_unready when provider is none.
+  startLiveSttSandbox: (deviceId?: string) => Promise<{
+    success: boolean;
+    reason?: 'stt_unready' | string;
+    error?: string;
+  }>;
+  stopLiveSttSandbox: () => Promise<{ success: boolean }>;
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => () => void;
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
