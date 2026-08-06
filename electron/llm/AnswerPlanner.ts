@@ -5,6 +5,7 @@ import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
+import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
 import {
   classifySdIntention,
   isSdIntentionPromoteExcludedType,

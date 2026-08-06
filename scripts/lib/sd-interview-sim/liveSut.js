@@ -167,7 +167,7 @@ function createLiveWhatToAnswerSut(opts = {}) {
     opts.sdProblemKey != null ? String(opts.sdProblemKey).trim() : '';
 
   return async function liveWhatToAnswerSut(ctx) {
-    const probe = String(ctx?.interviewerTurn?.text || '');
+    const probe = String(ctx?.interviewerTurn?.text || ctx?.question || '');
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     const started = Date.now();
@@ -175,14 +175,27 @@ function createLiveWhatToAnswerSut(opts = {}) {
     const sdProblemKey =
       factoryProblemKey ||
       String(ctx?.scenario?.prompt || ctx?.scenario?.id || '').trim();
+    // human-observer-suggestion: optional explicit question and/or per-turn nudge.
+    // Absent question keeps interviewer-mode behaviour (undefined → transcript infer).
+    const hasObserverQuestion = typeof ctx?.question === 'string';
+    const question = hasObserverQuestion ? ctx.question : undefined;
+    const effectivePromptInstruction =
+      typeof ctx?.promptInstruction === 'string' && ctx.promptInstruction.trim()
+        ? String(ctx.promptInstruction)
+        : promptInstruction;
+    const triggerSource =
+      ctx?.triggerSource === 'human-observer-suggestion'
+        ? 'human-observer-suggestion'
+        : undefined;
     try {
       const raw = await Promise.race([
-        im.runWhatShouldISay(undefined, 1, undefined, {
+        im.runWhatShouldISay(question, 1, undefined, {
           skipCooldown,
           forceFresh,
-          promptInstruction,
+          promptInstruction: effectivePromptInstruction,
           sdRequirementsUiAdvance: candidateAction === 'advance',
           ...(sdProblemKey ? { sdProblemKey } : {}),
+          ...(triggerSource ? { triggerSource } : {}),
         }),
         new Promise((_, reject) => {
           ctl.signal.addEventListener('abort', () => {
@@ -217,10 +230,12 @@ function createLiveWhatToAnswerSut(opts = {}) {
         text,
         spend,
         meta: {
-          promptInstruction,
+          promptInstruction: effectivePromptInstruction,
           candidateAction,
           sdRequirementsUiAdvance: candidateAction === 'advance',
           sdProblemKey: sdProblemKey || null,
+          ...(triggerSource ? { triggerSource } : {}),
+          ...(hasObserverQuestion ? { question } : {}),
         },
       };
     } finally {

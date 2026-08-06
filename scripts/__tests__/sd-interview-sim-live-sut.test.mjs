@@ -69,6 +69,49 @@ describe('sd-interview-sim liveSut helpers', () => {
     assert.ok(out.spend.estimated_usd > 0);
   });
 
+  test('observer ctx passes explicit question + triggerSource to WTA', async () => {
+    const calls = [];
+    const im = {
+      async runWhatShouldISay(q, _c, _i, options) {
+        calls.push({ q, options });
+        return 'observer answer';
+      },
+    };
+    const sut = createLiveWhatToAnswerSut({ intelligenceManager: im, timeoutMs: 5000 });
+    const out = await sut({
+      scenario: { prompt: 'Design a URL shortener' },
+      interviewerTurn: null,
+      question: 'Design a URL shortener',
+      triggerSource: 'human-observer-suggestion',
+    });
+    assert.equal(calls[0].q, 'Design a URL shortener');
+    assert.equal(calls[0].options.triggerSource, 'human-observer-suggestion');
+    assert.equal(out.text, 'observer answer');
+  });
+
+  test('observer nudge ctx passes promptInstruction without question', async () => {
+    const calls = [];
+    const im = {
+      async runWhatShouldISay(q, _c, _i, options) {
+        calls.push({ q, options });
+        return 'nudged';
+      },
+    };
+    const sut = createLiveWhatToAnswerSut({
+      intelligenceManager: im,
+      timeoutMs: 5000,
+      promptInstruction: 'factory default tone',
+    });
+    await sut({
+      interviewerTurn: null,
+      promptInstruction: 'focus on consistency',
+      triggerSource: 'human-observer-suggestion',
+    });
+    assert.equal(calls[0].q, undefined);
+    assert.equal(calls[0].options.promptInstruction, 'focus on consistency');
+    assert.equal(calls[0].options.triggerSource, 'human-observer-suggestion');
+  });
+
   test('createLiveWhatToAnswerSut pins sdProblemKey from scenario.prompt', async () => {
     const calls = [];
     const im = {

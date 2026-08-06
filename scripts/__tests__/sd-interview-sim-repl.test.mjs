@@ -26,6 +26,25 @@ describe('parseReplCommand', () => {
     assert.deepEqual(parseReplCommand('/run'), { type: 'autoRun', turns: null });
     assert.deepEqual(parseReplCommand('/run 3'), { type: 'autoRun', turns: 3 });
   });
+
+  test('/mode observer and /nudge are control-plane observer commands', () => {
+    assert.deepEqual(parseReplCommand('/mode observer'), {
+      type: 'mode',
+      mode: 'observer',
+    });
+    assert.deepEqual(parseReplCommand('/mode o'), {
+      type: 'mode',
+      mode: 'observer',
+    });
+    assert.deepEqual(parseReplCommand('/nudge focus on consistency'), {
+      type: 'nudge',
+      directive: 'focus on consistency',
+    });
+    assert.deepEqual(parseReplCommand('/nudge'), {
+      type: 'error',
+      message: 'usage: /nudge <directive>',
+    });
+  });
 });
 
 describe('createReplSession', () => {
@@ -149,5 +168,72 @@ describe('createReplSession', () => {
     assert.equal(out.assistant.text, 'My answer alone.');
     assert.equal(out.interviewer, null);
     assert.equal(agentCalls, 0);
+  });
+
+  test('observer mode calls SUT with explicit question and does not inject the request', async () => {
+    const injected = [];
+    const sutCalls = [];
+    const session = createReplSession({
+      scenario: { id: 'repl', prompt: 'Design a URL shortener' },
+      mode: 'observer',
+      sut: async (ctx) => {
+        sutCalls.push({
+          question: ctx.question,
+          promptInstruction: ctx.promptInstruction,
+          triggerSource: ctx.triggerSource,
+          interviewerTurn: ctx.interviewerTurn,
+        });
+        return { text: 'Speakable DF answer…' };
+      },
+      interviewerAgent: async () => ({ text: 'should not run' }),
+      inject: (_st, turns) => {
+        for (const t of turns) injected.push({ role: t.role, text: t.text });
+        return [];
+      },
+    });
+
+    assert.equal(session.getMode(), 'observer');
+    const out = await session.handleLine('Design a URL shortener');
+    assert.equal(out.type, 'turn');
+    assert.equal(out.sequence, 'observer-suggestion');
+    assert.equal(out.provenance, 'observer');
+    assert.equal(out.assistant.text, 'Speakable DF answer…');
+    assert.equal(sutCalls.length, 1);
+    assert.equal(sutCalls[0].question, 'Design a URL shortener');
+    assert.equal(sutCalls[0].triggerSource, 'human-observer-suggestion');
+    assert.equal(sutCalls[0].interviewerTurn, null);
+    assert.equal(
+      injected.filter((t) => t.role === 'interviewer').length,
+      0,
+      'observer request must not inject interviewer speech',
+    );
+    // Assistant suggestion may be injected for session parity after SUT returns.
+    assert.equal(session.getBundle().turns.length, 1);
+    assert.equal(session.getBundle().turns[0].role, 'assistant');
+  });
+
+  test('observer /nudge sets promptInstruction only and pauses auto-run', async () => {
+    const sutCalls = [];
+    const session = createReplSession({
+      scenario: { prompt: 'Design Bitly' },
+      mode: 'observer',
+      autoInterviewer: true,
+      sut: async (ctx) => {
+        sutCalls.push(ctx);
+        return { text: 'nudged answer' };
+      },
+      interviewerAgent: async () => ({ text: 'should not auto-run' }),
+      inject: () => [],
+    });
+
+    const out = await session.handleLine('/nudge focus on consistency');
+    assert.equal(out.type, 'turn');
+    assert.equal(out.sequence, 'observer-suggestion');
+    assert.equal(out.pausedAuto, true);
+    assert.equal(session.getAutoInterviewer(), false, 'observer inject pauses auto until /run or /auto');
+    assert.equal(sutCalls.length, 1);
+    assert.equal(sutCalls[0].question, undefined);
+    assert.equal(sutCalls[0].promptInstruction, 'focus on consistency');
+    assert.equal(sutCalls[0].triggerSource, 'human-observer-suggestion');
   });
 });

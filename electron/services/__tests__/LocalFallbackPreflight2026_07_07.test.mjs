@@ -1,5 +1,5 @@
 // LocalFallbackPreflight + LocalFallbackAssets tests (2026-07-07): the preflight
-// must classify missing required packaged assets as missing_required_asset, must
+// must classify missing packaged model assets as optional, must
 // never throw, and must publish provider statuses for local-embedding and
 // intent-classifier. Tests run under ELECTRON_RUN_AS_NODE so the bundled
 // CommonJS artifacts are the import target.
@@ -113,7 +113,9 @@ describe('LocalFallbackPreflight (2026-07-07)', () => {
     assert.ok(le, 'expected local-embedding status');
     assert.equal(ic.kind, 'packaged_local');
     assert.equal(le.kind, 'packaged_local');
-    assert.equal(ic.requiredForCoreFallback, true);
-    assert.equal(le.requiredForCoreFallback, true);
+    assert.equal(ic.requiredForCoreFallback, false);
+    assert.equal(le.requiredForCoreFallback, false);
+    if (ic.health !== 'ready') assert.equal(ic.health, 'missing_optional_dependency');
+    if (le.health !== 'ready') assert.equal(le.health, 'missing_optional_dependency');
   });
 });

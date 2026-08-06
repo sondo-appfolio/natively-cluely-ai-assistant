@@ -57,10 +57,20 @@ function parseReplCommand(line) {
     if (arg === 'interviewer' || arg === 'i' || arg === 'int') {
       return { type: 'mode', mode: 'interviewer' };
     }
+    if (arg === 'observer' || arg === 'o' || arg === 'obs') {
+      return { type: 'mode', mode: 'observer' };
+    }
     if (arg === 'auto' || arg === 'a') {
       return { type: 'autoRun', turns: turnsArg(parts[2]) };
     }
-    return { type: 'error', message: 'usage: /mode interviewer|candidate|auto' };
+    return { type: 'error', message: 'usage: /mode interviewer|candidate|observer|auto' };
+  }
+  if (cmd === 'nudge') {
+    const directive = raw.slice('/nudge'.length).trim();
+    if (!directive) {
+      return { type: 'error', message: 'usage: /nudge <directive>' };
+    }
+    return { type: 'nudge', directive };
   }
   if (cmd === 'auto') {
     if (arg === 'on' || arg === '1' || arg === 'true') return { type: 'auto', on: true };
@@ -75,7 +85,9 @@ const HELP_TEXT = [
   'Commands:',
   '  /mode interviewer   you type probes; Natively (SUT) answers  [default]',
   '  /mode candidate     you type answers; skips WTA; auto interviewer next',
+  '  /mode observer      control-plane WTA; no SessionTracker inject for the request',
   '  /mode auto [n]      hands-free: interviewer-agent ↔ Natively, you just watch',
+  '  /nudge <directive>    observer-only: promptInstruction coaching (no question swap)',
   '  /run [n]              same as /mode auto (ctrl-c stops the run)',
   '  /auto on|off          after candidate turns, run interviewer-agent (default on)',
   '  /open                 ask interviewer-agent to open (no WTA)',
@@ -92,7 +104,7 @@ const HELP_TEXT = [
  *   candidateAgent?: (ctx: object) => Promise<object> | object,
  *   sessionTracker?: { addTranscript?: Function } | null,
  *   inject?: typeof injectSpeech,
- *   mode?: 'interviewer' | 'candidate',
+ *   mode?: 'interviewer' | 'candidate' | 'observer',
  *   autoInterviewer?: boolean,
  *   provenance?: object,
  *   models?: { interviewer?: string, sut?: string },
@@ -112,7 +124,9 @@ function createReplSession(opts = {}) {
   const candidateAgent = opts.candidateAgent || createThinCandidateAgent();
   const models = opts.models || {};
 
-  let mode = opts.mode === 'candidate' ? 'candidate' : 'interviewer';
+  const initialMode =
+    opts.mode === 'candidate' || opts.mode === 'observer' ? opts.mode : 'interviewer';
+  let mode = initialMode;
   let autoInterviewer = opts.autoInterviewer !== false;
   let ended = false;
 
@@ -120,6 +134,7 @@ function createReplSession(opts = {}) {
     provenance: {
       ...(opts.provenance || {}),
       tier: (opts.provenance && opts.provenance.tier) || 'REPL',
+      ...(initialMode === 'observer' ? { observer: true } : {}),
       models: {
         interviewer: models.interviewer || DEFAULT_INTERVIEWER_MODEL,
         sut: models.sut || DEFAULT_SUT_MODEL,
@@ -275,6 +290,74 @@ function createReplSession(opts = {}) {
     };
   }
 
+  /**
+   * Control-plane human-observer-suggestion: call SUT/WTA without injecting
+   * the request as interviewer/candidate SessionTracker speech. Pauses auto.
+   * @param {{ question?: string, promptInstruction?: string }} req
+   */
+  async function observerSuggestion(req) {
+    // Observer inject always pauses auto-run; resume only via /run or /auto.
+    const pausedAuto = autoInterviewer === true;
+    autoInterviewer = false;
+    run.bundle.provenance = {
+      ...run.bundle.provenance,
+      observer: true,
+    };
+
+    let answer;
+    try {
+      answer = await Promise.resolve(
+        opts.sut({
+          scenario,
+          interviewerTurn: null,
+          question: req.question,
+          promptInstruction: req.promptInstruction,
+          triggerSource: 'human-observer-suggestion',
+          injectLog: [...injectLog],
+          injected: [],
+          bundle: run.bundle,
+          turnCount: run.spend.turn_count,
+          candidateAction: 'trigger',
+        }),
+      );
+    } catch (err) {
+      const text = `[sut-error] ${err?.message || String(err)}`.slice(0, 2000);
+      appendTurn(run, { role: 'assistant', text, attachments: [] });
+      return {
+        type: 'turn',
+        sequence: 'observer-suggestion',
+        provenance: 'observer',
+        interviewer: null,
+        assistant: { text, error: true },
+        pausedAuto,
+      };
+    }
+
+    const answerObj =
+      answer && typeof answer === 'object' ? answer : { text: String(answer ?? '') };
+    // Suggestion display/session parity only — request itself was never injected.
+    doInject({
+      role: 'assistant',
+      text: answerObj.text ?? '',
+      speaker: 'assistant',
+    });
+    appendTurn(run, {
+      role: 'assistant',
+      text: answerObj.text ?? '',
+      attachments: answerObj.attachments || [],
+    });
+    if (answerObj.spend) recordSpend(run, answerObj.spend);
+
+    return {
+      type: 'turn',
+      sequence: 'observer-suggestion',
+      provenance: 'observer',
+      interviewer: null,
+      assistant: answerObj,
+      pausedAuto,
+    };
+  }
+
   return {
     getMode() {
       return mode;
@@ -340,9 +423,23 @@ function createReplSession(opts = {}) {
         }
         if (cmd.type === 'mode') {
           mode = cmd.mode;
+          if (mode === 'observer') {
+            run.bundle.provenance = { ...run.bundle.provenance, observer: true };
+          }
           return { type: 'mode', mode };
         }
+        if (cmd.type === 'nudge') {
+          if (mode !== 'observer') {
+            return {
+              type: 'error',
+              message: '/nudge is only available in /mode observer',
+            };
+          }
+          return observerSuggestion({ promptInstruction: cmd.directive });
+        }
         if (cmd.type === 'autoRun') {
+          // Explicit /run (or /mode auto) resumes after an observer pause.
+          autoInterviewer = true;
           return { type: 'autoRun', turns: cmd.turns ?? null };
         }
         if (cmd.type === 'auto') {
@@ -374,6 +471,10 @@ function createReplSession(opts = {}) {
 
       if (mode === 'candidate') {
         return candidateTurnThenMaybeAuto(text);
+      }
+
+      if (mode === 'observer') {
+        return observerSuggestion({ question: text });
       }
 
       const interviewerTurn = normalizeProbe({ text });

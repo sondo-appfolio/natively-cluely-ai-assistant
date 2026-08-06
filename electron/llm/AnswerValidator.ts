@@ -52,6 +52,24 @@ const hasComplexity = (answer: string): boolean =>
   /\bTime(?:\s+Complexity)?\s*:?\s*(?:`|\$|\\\()?\s*O\s*\(/i.test(answer)
   && /\bSpace(?:\s+Complexity)?\s*:?\s*(?:`|\$|\\\()?\s*O\s*\(/i.test(answer);
 
+const isCodingType = (answerType: AnswerType): boolean =>
+  answerType === 'coding_question_answer' || answerType === 'dsa_question_answer';
+
+/**
+ * "We never classified this", NOT "we determined this is not coding".
+ * AnswerPlanner assigns `unknown_answer` only when no question could be
+ * extracted, so the scaffold detectors below must treat it as out of scope:
+ * their premise (a non-coding answer has no reason to contain coding
+ * vocabulary) holds for answers KNOWN to be non-coding, not unclassified
+ * ones. A screen-captured coding problem with no spoken question yields
+ * `unknown_answer` plus a legitimate coding answer carrying exactly the
+ * fingerprint they treat as contamination. `general_meeting_answer` is
+ * deliberately excluded: it is a real classification reached only when a
+ * question exists.
+ */
+const isUnclassifiedType = (answerType: AnswerType): boolean =>
+  answerType === 'unknown_answer';
+
 /**
  * Ambiguous plan types that a coding FOLLOW-UP may still carry after promotion
  * onto the coding chat path (bug #6). Only these may remap to DSA validation.

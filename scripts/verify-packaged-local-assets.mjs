@@ -130,7 +130,11 @@ function checkAny(root, relCandidates, label) {
 function verifySource() {
   console.log('[verify-packaged-local-assets] source mode');
   const modelsRoot = path.join(repoRoot, 'resources', 'models');
-  for (const rel of REQUIRED_MODEL_FILES) checkFile(modelsRoot, rel, 'required model file');
+  if (process.env.NATIVELY_REQUIRE_LOCAL_MODELS === '1') {
+    for (const rel of REQUIRED_MODEL_FILES) checkFile(modelsRoot, rel, 'required model file');
+  } else {
+    notes.push('Local model verification skipped; set NATIVELY_REQUIRE_LOCAL_MODELS=1 to require packaged models');
+  }
   for (const dir of REQUIRED_PACKAGE_DIRS) {
     if (!exists(path.join(repoRoot, dir))) errors.push(`Missing required dependency dir: ${dir} (run npm ci)`);
   }
@@ -170,7 +174,11 @@ function verifyPackaged(appArg) {
   }
 
   const modelsRoot = path.join(resources, 'models');
-  for (const rel of REQUIRED_MODEL_FILES) checkFile(modelsRoot, rel, 'packaged model file');
+  if (process.env.NATIVELY_REQUIRE_LOCAL_MODELS === '1') {
+    for (const rel of REQUIRED_MODEL_FILES) checkFile(modelsRoot, rel, 'packaged model file');
+  } else {
+    notes.push('Local model verification skipped; set NATIVELY_REQUIRE_LOCAL_MODELS=1 to require packaged models');
+  }
 
   const unpacked = path.join(resources, 'app.asar.unpacked');
   for (const dir of REQUIRED_PACKAGE_DIRS) {

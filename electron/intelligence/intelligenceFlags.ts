@@ -530,7 +530,6 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // rolled out."
   contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
   contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
-  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
   // Default false (not isInternalDevTestContext) even in dev/test — unlike
   // the Context OS flags above, this one's live-fire behavior was PROVEN to
   // regress real answers in run-032 (see the flag's doc comment). Dev/test
