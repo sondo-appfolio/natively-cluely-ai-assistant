@@ -252,6 +252,7 @@ import {
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
+import { planAskSubmitAction, askSubmitTouchesListenTransport } from '../lib/askSubmit.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { projectLiveTranscriptChunk } from '../lib/liveTranscriptProjection.mjs';
@@ -4490,7 +4491,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           isManualRecording: isRecordingRef.current,
         });
 
-        // Ask/submit voice buffer (Answers chip) — independent of rolling projection.
+        // Ask/submit voice buffer — independent of rolling projection (ticket 04).
         if (route.captureForAsk && transcript.speaker === 'user') {
           if (transcript.final) {
             // Accumulate final transcripts, collapsing STT overlap/re-transcription
@@ -4508,11 +4509,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             setManualTranscript(transcript.text);
             manualTranscriptRef.current = transcript.text;
           }
-          if (!route.projectToRolling) {
-            return;
-          }
         }
 
+        // Always-on live transcript while armed (ticket 02); interviewer always.
         if (!route.projectToRolling) {
           return;
         }
@@ -5715,11 +5714,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cleanups.forEach((fn) => fn());
   }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
 
+  // Ask/submit (chat:answer / Answer chip): spoken or typed → AI turn.
+  // Must NEVER call toggleListenTransport — listen arming is red-square only
+  // (interviewman-control-map / ticket 04).
   const handleAnswerNow = async () => {
     if (isManualRecording) {
       if (!tryBeginOverlayAction('answer_now')) return;
       try {
-        // Stop recording - send accumulated voice input to Gemini
+        // End Ask voice-capture arming and send accumulated input to the AI path.
+        // Does not pause/resume listen transport.
         isRecordingRef.current = false;
         setIsManualRecording(false);
         setManualTranscript('');
@@ -5740,7 +5743,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setManualTranscript('');
         manualTranscriptRef.current = '';
 
-        if (!question && currentAttachments.length === 0) {
+        const askPlan = planAskSubmitAction({
+          isVoiceCaptureArmed: true,
+          hasQuestionOrAttachments: Boolean(question) || currentAttachments.length > 0,
+        });
+        if (askSubmitTouchesListenTransport(askPlan.effects)) {
+          console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
+          return;
+        }
+
+        if (askPlan.action === 'empty_speech_error') {
           if (sttUserStatus === 'failed' && sttUserError) {
             const errCat = categorizeSttError(sttUserError);
             setMessages((prev) => [
@@ -5875,7 +5887,17 @@ Provide only the answer, nothing else.`;
         endOverlayAction('answer_now');
       }
     } else {
-      // Start recording - reset voice input state
+      // Arm Ask voice-capture only (user-mic → submit). Listen transport is
+      // independent — do not call toggleListenTransport here.
+      const askPlan = planAskSubmitAction({
+        isVoiceCaptureArmed: false,
+        hasQuestionOrAttachments: false,
+      });
+      if (askSubmitTouchesListenTransport(askPlan.effects)) {
+        console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
+        return;
+      }
+
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
@@ -8380,6 +8402,8 @@ Provide only the answer, nothing else.`;
                 </button>
                 <button
                   onClick={handleAnswerNow}
+                  data-testid="ask-submit-chip"
+                  title={t('Ask / Submit')}
                   className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
                     isManualRecording
                       ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
@@ -8390,11 +8414,11 @@ Provide only the answer, nothing else.`;
                   {isManualRecording ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      {t('Stop')}
+                      {t('Submit')}
                     </>
                   ) : (
                     <>
-                      <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      <Zap className="w-3 h-3 opacity-70" /> {t('Ask')}
                     </>
                   )}
                 </button>
@@ -8444,7 +8468,7 @@ Provide only the answer, nothing else.`;
                       ))}
                     </div>
                     <span className="text-[10px] overlay-text-muted">
-                      {t('Ask a question or click Answer')}
+                      {t('Ask a question or click Ask')}
                     </span>
                   </div>
                 )}
