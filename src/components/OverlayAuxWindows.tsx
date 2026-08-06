@@ -36,6 +36,7 @@ const DEFAULT_STATE: Required<Omit<OverlayUiState, 'hasContent'>> & OverlayUiSta
   overlayOpacity: 1,
   themeMode: 'dark',
   interfaceTheme: 'default',
+  listenArmed: false,
 };
 
 function useOverlayUiState(): OverlayUiState {
