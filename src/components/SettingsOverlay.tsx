@@ -25,10 +25,10 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
-    clampOverlayOpacity,
     getOverlayAppearance,
     getGlassOverlayAppearance,
-    OVERLAY_OPACITY_DEFAULT,
+    migrateStoredOverlayOpacity,
+    isStoredOverlayOpacityUserSet,
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
@@ -648,21 +648,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [availableAiLanguages, setAvailableAiLanguages] = useState<any[]>([]);
 
     // Overlay Opacity state
-    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
-        const stored = localStorage.getItem('natively_overlay_opacity');
-        const parsed = stored ? parseFloat(stored) : NaN;
-        // Treat missing value or the old default (0.65) as "not user-set"
-        const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
-        return isUserSet ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
-    });
+    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => migrateStoredOverlayOpacity());
 
     // When the theme changes and the user hasn't saved a custom value, reset to theme-aware default
     const resolvedTheme = useResolvedTheme();
     useEffect(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
         const parsed = stored ? parseFloat(stored) : NaN;
-        const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
-        if (!isUserSet) {
+        if (!isStoredOverlayOpacityUserSet(parsed)) {
             setOverlayOpacity(getDefaultOverlayOpacity());
         }
     }, [resolvedTheme]);

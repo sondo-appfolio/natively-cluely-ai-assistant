@@ -22,18 +22,65 @@ const mix = (min: number, max: number, value: number) => min + ((max - min) * va
 
 export const OVERLAY_OPACITY_MIN = 0.35;
 export const OVERLAY_OPACITY_MAX = 1;
-/** @deprecated Use getDefaultOverlayOpacity() for theme-aware default. */
-export const OVERLAY_OPACITY_DEFAULT = 0.65;
-export const OVERLAY_OPACITY_DEFAULT_DARK = 0.80;
-export const OVERLAY_OPACITY_DEFAULT_LIGHT = 0.70;
+/**
+ * Factory default for dark meeting overlay. Tuned for InterviewMan-like
+ * readability (dark charcoal, high contrast text over bright meeting UIs).
+ * @deprecated Prefer getDefaultOverlayOpacity() / resolveStoredOverlayOpacity().
+ */
+export const OVERLAY_OPACITY_DEFAULT = 0.85;
+export const OVERLAY_OPACITY_DEFAULT_DARK = 0.85;
+export const OVERLAY_OPACITY_DEFAULT_LIGHT = 0.75;
+/** Prior factory defaults — migrate to theme-aware default, not treat as user-set. */
+export const OVERLAY_OPACITY_LEGACY_DEFAULTS = Object.freeze([0.65, 0.8, 0.80]);
 
 /** Returns the correct default opacity based on the currently active theme. */
-export const getDefaultOverlayOpacity = (): number =>
-    document.documentElement.getAttribute('data-theme') === 'light'
-        ? OVERLAY_OPACITY_DEFAULT_LIGHT
-        : OVERLAY_OPACITY_DEFAULT_DARK;
+export const getDefaultOverlayOpacity = (): number => {
+    try {
+        if (typeof document !== 'undefined' &&
+            document.documentElement.getAttribute('data-theme') === 'light') {
+            return OVERLAY_OPACITY_DEFAULT_LIGHT;
+        }
+    } catch {
+        /* node tests / no DOM */
+    }
+    return OVERLAY_OPACITY_DEFAULT_DARK;
+};
 
 export const clampOverlayOpacity = (opacity: number) => clamp(opacity, OVERLAY_OPACITY_MIN, OVERLAY_OPACITY_MAX);
+
+/** True when localStorage value is an intentional user choice (not a factory default). */
+export const isStoredOverlayOpacityUserSet = (parsed: number): boolean => {
+    if (!Number.isFinite(parsed)) return false;
+    const eps = 1e-6;
+    if (OVERLAY_OPACITY_LEGACY_DEFAULTS.some((v) => Math.abs(parsed - v) < eps)) return false;
+    if (Math.abs(parsed - OVERLAY_OPACITY_DEFAULT) < eps) return false;
+    if (Math.abs(parsed - OVERLAY_OPACITY_DEFAULT_DARK) < eps) return false;
+    if (Math.abs(parsed - OVERLAY_OPACITY_DEFAULT_LIGHT) < eps) return false;
+    return true;
+};
+
+/** Resolve localStorage overlay opacity with legacy-default migration. */
+export const resolveStoredOverlayOpacity = (stored: string | null | undefined): number => {
+    const parsed = stored != null && stored !== '' ? parseFloat(stored) : NaN;
+    return isStoredOverlayOpacityUserSet(parsed)
+        ? clampOverlayOpacity(parsed)
+        : getDefaultOverlayOpacity();
+};
+
+/**
+ * Resolve + persist theme-aware default when storage is empty/legacy so the
+ * meeting overlay and Settings slider stay in sync after readability bumps.
+ */
+export const migrateStoredOverlayOpacity = (): number => {
+    const stored =
+        typeof localStorage !== 'undefined' ? localStorage.getItem('natively_overlay_opacity') : null;
+    const parsed = stored != null && stored !== '' ? parseFloat(stored) : NaN;
+    const resolved = resolveStoredOverlayOpacity(stored);
+    if (typeof localStorage !== 'undefined' && !isStoredOverlayOpacityUserSet(parsed)) {
+        localStorage.setItem('natively_overlay_opacity', String(resolved));
+    }
+    return resolved;
+};
 
 const normalizeOpacity = (opacity: number) =>
     (clampOverlayOpacity(opacity) - OVERLAY_OPACITY_MIN) / (OVERLAY_OPACITY_MAX - OVERLAY_OPACITY_MIN);
@@ -100,20 +147,22 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
         };
     }
 
+    // InterviewMan-like charcoal: higher alpha floors so bright meeting UIs
+    // cannot wash out white overlay text (readability > glass see-through).
     return {
         shellStyle: {
-            backgroundColor: `rgba(24, 26, 32, ${scale(0.12, 1, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.08, 0.14, surfaceStrength)})`,
+            backgroundColor: `rgba(18, 18, 22, ${scale(0.58, 0.94, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.1, 0.16, surfaceStrength)})`,
             boxShadow: 'none',
-            backdropFilter: `blur(${scale(6, 20, blurStrength)}px) saturate(140%)`,
-            WebkitBackdropFilter: `blur(${scale(6, 20, blurStrength)}px) saturate(140%)`,
+            backdropFilter: `blur(${scale(8, 22, blurStrength)}px) saturate(140%)`,
+            WebkitBackdropFilter: `blur(${scale(8, 22, blurStrength)}px) saturate(140%)`,
         },
         pillStyle: {
-            backgroundColor: `rgba(24, 26, 32, ${scale(0.1, 0.98, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.08, 0.14, surfaceStrength)})`,
+            backgroundColor: `rgba(18, 18, 22, ${scale(0.55, 0.92, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.1, 0.16, surfaceStrength)})`,
             boxShadow: 'none',
-            backdropFilter: `blur(${scale(4, 13, blurStrength)}px) saturate(136%)`,
-            WebkitBackdropFilter: `blur(${scale(4, 13, blurStrength)}px) saturate(136%)`,
+            backdropFilter: `blur(${scale(6, 16, blurStrength)}px) saturate(136%)`,
+            WebkitBackdropFilter: `blur(${scale(6, 16, blurStrength)}px) saturate(136%)`,
         },
         transcriptStyle: {
             backgroundColor: 'transparent',
@@ -122,34 +171,34 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
             WebkitBackdropFilter: 'none',
         },
         subtleStyle: {
-            backgroundColor: `rgba(40, 45, 56, ${scale(0.18, 0.92, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.04, 0.085, surfaceStrength)})`,
+            backgroundColor: `rgba(32, 34, 40, ${scale(0.45, 0.9, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.06, 0.1, surfaceStrength)})`,
         },
         chipStyle: {
-            backgroundColor: `rgba(56, 61, 73, ${scale(0.2, 0.96, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.04, 0.08, surfaceStrength)})`,
+            backgroundColor: `rgba(42, 44, 52, ${scale(0.5, 0.92, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.06, 0.1, surfaceStrength)})`,
         },
         inputStyle: {
-            backgroundColor: `rgba(46, 51, 63, ${scale(0.24, 0.94, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.05, 0.095, surfaceStrength)})`,
+            backgroundColor: `rgba(36, 38, 46, ${scale(0.55, 0.92, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.07, 0.12, surfaceStrength)})`,
         },
         controlStyle: {
-            backgroundColor: `rgba(52, 57, 69, ${scale(0.22, 0.94, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.05, 0.095, surfaceStrength)})`,
+            backgroundColor: `rgba(40, 42, 50, ${scale(0.5, 0.9, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.07, 0.12, surfaceStrength)})`,
         },
         iconStyle: {
-            backgroundColor: `rgba(54, 59, 71, ${scale(0.2, 0.92, surfaceStrength)})`,
+            backgroundColor: `rgba(42, 44, 52, ${scale(0.48, 0.9, surfaceStrength)})`,
         },
         codeBlockStyle: {
-            backgroundColor: `rgba(${VIVID_DARK_CODE_BG_RGB}, ${scale(0.30, 0.97, surfaceStrength)})`,
-            borderColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
+            backgroundColor: `rgba(${VIVID_DARK_CODE_BG_RGB}, ${scale(0.55, 0.97, surfaceStrength)})`,
+            borderColor: `rgba(255, 255, 255, ${scale(0.07, 0.12, surfaceStrength)})`,
         },
         codeHeaderStyle: {
-            backgroundColor: `rgba(45, 45, 45, ${scale(0.22, 0.94, surfaceStrength)})`,
-            borderBottomColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
+            backgroundColor: `rgba(32, 32, 36, ${scale(0.5, 0.94, surfaceStrength)})`,
+            borderBottomColor: `rgba(255, 255, 255, ${scale(0.07, 0.12, surfaceStrength)})`,
         },
         dividerStyle: {
-            backgroundColor: `rgba(255, 255, 255, ${scale(0.06, 0.12, surfaceStrength)})`,
+            backgroundColor: `rgba(255, 255, 255, ${scale(0.08, 0.14, surfaceStrength)})`,
         },
     };
 };

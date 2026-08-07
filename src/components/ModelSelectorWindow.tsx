@@ -4,11 +4,9 @@ import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexC
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
-    clampOverlayOpacity,
-    getDefaultOverlayOpacity,
     getGlassOverlayAppearance,
     getOverlayAppearance,
-    OVERLAY_OPACITY_DEFAULT,
+    migrateStoredOverlayOpacity,
 } from '../lib/overlayAppearance';
 
 // Define Model Types
@@ -38,12 +36,7 @@ const ModelSelectorWindow = () => {
     // actual live-configured value — the same gap SettingsPopup.tsx's
     // already-committed fix (7c4f3bd2) closed for that window.
     const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
-    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
-        const stored = localStorage.getItem('natively_overlay_opacity');
-        const parsed = stored ? parseFloat(stored) : NaN;
-        const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
-        return isUserSet ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
-    });
+    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => migrateStoredOverlayOpacity());
 
     useEffect(() => {
         const handleStorage = () => setInterfaceTheme(getMeetingInterfaceTheme());
