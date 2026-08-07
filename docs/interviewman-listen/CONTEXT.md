@@ -11,8 +11,12 @@ Continuous live STT text of what is being heard — interviewer (system-audio) a
 _Avoid_: Answers-as-STT-start; Ask chip as listen gate; single-channel-only as the full live transcript; InterviewMan retention-timer assumptions
 
 **live-transcript-surfaces**:
-Two places that show live STT text: (1) in-meeting overlay while transport is listening; (2) Settings Audio live-STT sandbox that streams real transcript (not levels meter or credential ping). Overlay ships first if sequenced.
-_Avoid_: Treating Audio level meter or `test-stt-connection` as the live transcript test; reusing no-audio SD overlay e2e harness as this sandbox
+Two places that show live STT text: (1) in-meeting overlay **Transcription** panel (bottom, speaker-labeled turns) while Show Transcription is on and transport is listening; (2) Settings Audio live-STT sandbox that streams real transcript (not levels meter or credential ping).
+_Avoid_: Treating Audio level meter or `test-stt-connection` as the live transcript test; reusing no-audio SD overlay e2e harness as this sandbox; single-line marquee as the only transcript surface
+
+**transcription-panel-speakers**:
+Bottom Transcription panel labels dual-channel STT as **Speaker 1** (interviewer / system audio) and **Speaker 2** (user mic) as text streams. Show Transcription preference shows/hides the whole panel.
+_Avoid_: Unlabeled mixed rolling text as the primary transcript UX; gating the panel on Ask chip
 
 ### Controls
 

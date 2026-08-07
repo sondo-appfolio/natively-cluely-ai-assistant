@@ -264,10 +264,11 @@ import {
 import BottomAskBar from './ui/BottomAskBar';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
+import { projectLiveTranscriptChunk } from '../lib/liveTranscriptProjection.mjs';
 import {
-  projectLiveTranscriptChunk,
-  shouldShowLiveTranscriptSurface,
-} from '../lib/liveTranscriptProjection.mjs';
+  applyLiveTranscriptTurn,
+  shouldShowTranscriptionPanel,
+} from '../lib/liveTranscriptTurns.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -345,7 +346,7 @@ import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
-import RollingTranscript from './ui/RollingTranscript';
+import LiveTranscriptPanel from './ui/LiveTranscriptPanel';
 import TopPill from './ui/TopPill';
 import { SdRequirementsGateStrip } from './SdRequirementsGateStrip';
 
@@ -1385,7 +1386,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     answerPanelPinnedRef.current = answerPanelPinned;
   }, [answerPanelPinned]);
 
-  const [rollingTranscript, setRollingTranscript] = useState(''); // For interviewer rolling text bar
+  const [rollingTranscript, setRollingTranscript] = useState(''); // legacy single-line buffer (kept for clear/end paths)
+  const [liveTranscriptTurns, setLiveTranscriptTurns] = useState<
+    Array<{ id: string; speaker: string; label: string; text: string; isFinal: boolean }>
+  >([]);
   const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
   // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
   const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3437,6 +3441,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
       pendingRollingPartialRef.current = null;
       setRollingTranscript('');
+      setLiveTranscriptTurns([]);
       setIsInterviewerSpeaking(false);
       interviewerSpeakingRef.current = false;
       // Reset STT status to 'awaiting-audio' on session reset. The previous
@@ -4595,7 +4600,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return;
         }
 
-        // Rolling bar: interviewer always; user-mic when transport is armed.
+        // Bottom Transcription panel — speaker-labeled turns (Speaker 1 / 2).
+        setLiveTranscriptTurns((prev) =>
+          applyLiveTranscriptTurn(prev, {
+            speaker: transcript.speaker,
+            text: transcript.text,
+            final: transcript.final === true,
+          }),
+        );
+
+        // Keep rolling buffer for legacy helpers / clear-on-end.
         if (!transcript.final) {
           if (!interviewerSpeakingRef.current) {
             interviewerSpeakingRef.current = true;
@@ -8102,31 +8116,6 @@ Provide only the answer, nothing else.`;
                 </div>
               ) : null}
 
-              {/* Rolling Transcript Bar — always-on while listen is armed (even
-                  before the first STT token; RollingTranscript shows "Listening…").
-                  Preference off still hides the surface. */}
-              {shouldShowLiveTranscriptSurface({
-                showTranscriptPreference: showTranscript,
-                listenArmed: listenTransport.state === 'armed',
-                hasRollingText: !!rollingTranscript,
-              }) ? (
-                <RollingTranscript
-                  text={rollingTranscript}
-                  isActive={isInterviewerSpeaking}
-                  surfaceStyle={appearance.transcriptStyle}
-                  interviewerChannel={{
-                    status: interviewerSttIndicatorStatus,
-                    error: interviewerSttIndicatorError,
-                    provider: sttInterviewerProvider,
-                  }}
-                  microphoneChannel={{
-                    status: sttUserStatus,
-                    error: sttUserError,
-                    provider: sttUserProvider,
-                  }}
-                />
-              ) : null}
-
               {/* Chat History - Only show if there are messages OR active states */}
               {showAnswerPanel && (
                 <motion.div
@@ -8448,10 +8437,10 @@ Provide only the answer, nothing else.`;
                 </AnimatePresence>
                 <div
                   className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${
-                    shouldShowLiveTranscriptSurface({
+                    shouldShowTranscriptionPanel({
                       showTranscriptPreference: showTranscript,
                       listenArmed: listenTransport.state === 'armed',
-                      hasRollingText: !!rollingTranscript,
+                      turnCount: liveTranscriptTurns.length,
                     })
                       ? 'pt-1'
                       : 'pt-3'
@@ -8645,6 +8634,19 @@ Provide only the answer, nothing else.`;
                                     overlay no longer accidentally engage the
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
+                {shouldShowTranscriptionPanel({
+                  showTranscriptPreference: showTranscript,
+                  listenArmed: listenTransport.state === 'armed',
+                  turnCount: liveTranscriptTurns.length,
+                }) ? (
+                  <LiveTranscriptPanel
+                    turns={liveTranscriptTurns}
+                    surfaceStyle={appearance.transcriptStyle}
+                    title={t('Transcription')}
+                    placeholder={t('Transcription will appear here…')}
+                  />
+                ) : null}
+
                 <div data-stealth-engage="true">
                   <BottomAskBar
                     value={inputValue}

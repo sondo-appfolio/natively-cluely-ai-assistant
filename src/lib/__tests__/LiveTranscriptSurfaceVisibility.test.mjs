@@ -1,10 +1,6 @@
 /**
- * Feedback loop for: "I do not see the live transcription text area"
- * while a meeting is listening (InterviewMan always-on-live-transcript).
- *
- * Symptom: overlay must mount a live-transcript surface while listen is armed
- * even before the first STT token arrives — empty text is still a visible area
- * ("Listening…"), not a missing region.
+ * Feedback loop: dedicated bottom Transcription panel must mount while
+ * listening when Show Transcription is on — even before the first STT token.
  */
 
 import { test, describe } from 'node:test';
@@ -13,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shouldShowLiveTranscriptSurface } from '../liveTranscriptProjection.mjs';
+import { shouldShowTranscriptionPanel } from '../liveTranscriptTurns.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const niSrc = readFileSync(
@@ -20,20 +17,32 @@ const niSrc = readFileSync(
   'utf-8',
 );
 
-describe('shouldShowLiveTranscriptSurface — always-on surface', () => {
-  test('armed + preference on + empty text → show surface (user symptom seam)', () => {
+describe('shouldShowTranscriptionPanel — bottom panel', () => {
+  test('armed + preference on + empty turns → show panel', () => {
     assert.equal(
-      shouldShowLiveTranscriptSurface({
+      shouldShowTranscriptionPanel({
         showTranscriptPreference: true,
         listenArmed: true,
-        hasRollingText: false,
+        turnCount: 0,
       }),
       true,
-      'live transcript area must be visible while listening even with no STT text yet',
     );
   });
 
-  test('preference off → hide even when armed', () => {
+  test('preference off → hide even when armed with turns', () => {
+    assert.equal(
+      shouldShowTranscriptionPanel({
+        showTranscriptPreference: false,
+        listenArmed: true,
+        turnCount: 3,
+      }),
+      false,
+    );
+  });
+});
+
+describe('shouldShowLiveTranscriptSurface — legacy helper still coherent', () => {
+  test('preference off hides', () => {
     assert.equal(
       shouldShowLiveTranscriptSurface({
         showTranscriptPreference: false,
@@ -43,46 +52,16 @@ describe('shouldShowLiveTranscriptSurface — always-on surface', () => {
       false,
     );
   });
-
-  test('paused with leftover text → keep surface', () => {
-    assert.equal(
-      shouldShowLiveTranscriptSurface({
-        showTranscriptPreference: true,
-        listenArmed: false,
-        hasRollingText: true,
-      }),
-      true,
-    );
-  });
-
-  test('paused with empty text → hide', () => {
-    assert.equal(
-      shouldShowLiveTranscriptSurface({
-        showTranscriptPreference: true,
-        listenArmed: false,
-        hasRollingText: false,
-      }),
-      false,
-    );
-  });
 });
 
-describe('NativelyInterface mounts surface via visibility helper (not text-gated)', () => {
-  test('does not require rollingTranscript truthy to mount RollingTranscript', () => {
-    // The bug: `{showTranscript && rollingTranscript ? <RollingTranscript/> : null}`
-    // hides the entire live-transcript area until first STT token.
-    assert.doesNotMatch(
-      niSrc,
-      /showTranscript\s*&&\s*rollingTranscript\s*\?\s*\(/,
-      'overlay must not gate the live-transcript surface on non-empty rollingTranscript',
-    );
+describe('NativelyInterface mounts LiveTranscriptPanel via preference', () => {
+  test('uses shouldShowTranscriptionPanel and LiveTranscriptPanel', () => {
+    assert.match(niSrc, /shouldShowTranscriptionPanel\s*\(/);
+    assert.match(niSrc, /LiveTranscriptPanel/);
+    assert.match(niSrc, /live-transcript-panel|LIVE_TRANSCRIPT_PANEL|Transcription will appear/);
   });
 
-  test('uses shouldShowLiveTranscriptSurface for mount decision', () => {
-    assert.match(
-      niSrc,
-      /shouldShowLiveTranscriptSurface\s*\(/,
-      'overlay must call shouldShowLiveTranscriptSurface for always-on surface visibility',
-    );
+  test('does not mount RollingTranscript as the primary surface', () => {
+    assert.doesNotMatch(niSrc, /<RollingTranscript[\s>]/);
   });
 });
