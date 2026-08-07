@@ -5,21 +5,16 @@
  * Why this exists
  * ---------------
  * The overlay is sized-to-content: the renderer reports `contentRef.offsetHeight`
- * to the main process, which clamps the OS window to `workArea.height * 0.9`
- * (WindowHelper.setOverlayDimensionsCentered). The shell is `overflow-hidden`.
+ * to the main process, which clamps the OS window to
+ * `workArea.height * SESSION_SHELL_HEIGHT_FRACTION` (~0.98;
+ * WindowHelper.setOverlayDimensionsAnchored). The shell is `overflow-hidden`.
  *
  * The chat scroll area's max height used to be derived from the shell WIDTH
- * alone (320px collapsed → 560px expanded). On a short display, expanded view
- * + an attached screenshot makes
- *     chrome (TopPill + quick-actions + input + footer + paddings) + 560
- * exceed the 90% budget. The window gets clamped, but the taller-than-window
- * content is still laid out, so the bottom rows (model selector / settings /
- * send button) are cropped past the clamped window edge.
- *
- * Fix: also clamp the scroll max by `budget - chrome`, so the scroll area
- * shrinks to absorb the overflow and the reported content height never exceeds
- * the budget the main process will grant. The footer then always stays visible.
+ * alone (320px collapsed → 720px expanded). On a short display, expanded view
+ * + an attached screenshot can still exceed the near-full work-area budget.
+ * Clamp the scroll max by `budget - chrome` so the footer stays visible.
  */
+import { SESSION_SHELL_HEIGHT_FRACTION } from './sessionShellVerticalBudget.mjs';
 
 /** Clamp n into [lo, hi]. */
 export function clamp(n, lo, hi) {
@@ -36,7 +31,8 @@ export function widthDerivedScrollMax(width, opts = {}) {
     collapsedWidth = 600,
     expandedWidth = 780,
     minHeight = 320,
-    maxHeight = 560,
+    // Tall InterviewMan-style column on roomy displays.
+    maxHeight = 720,
   } = opts;
   if (expandedWidth <= collapsedWidth) return maxHeight;
   const t = clamp((width - collapsedWidth) / (expandedWidth - collapsedWidth), 0, 1);
@@ -59,7 +55,7 @@ export function verticalScrollCap(params) {
   const {
     availHeight,
     chromeHeight,
-    budgetRatio = 0.9,
+    budgetRatio = SESSION_SHELL_HEIGHT_FRACTION,
     safetyMargin = 8,
     minScroll = 120,
   } = params;

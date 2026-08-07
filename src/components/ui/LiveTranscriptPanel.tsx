@@ -15,6 +15,10 @@ export interface LiveTranscriptPanelProps {
   placeholder?: string;
   title?: string;
   autoScroll?: boolean;
+  /** When set, scroll region flex-grows within a tall session shell. */
+  flexGrow?: boolean;
+  /** Cap for the scroll region when flex-growing (px). */
+  scrollMaxHeight?: number;
 }
 
 /**
@@ -27,6 +31,8 @@ export default function LiveTranscriptPanel({
   placeholder = 'Transcription will appear here…',
   title = 'Transcription',
   autoScroll = true,
+  flexGrow = false,
+  scrollMaxHeight,
 }: LiveTranscriptPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -38,18 +44,32 @@ export default function LiveTranscriptPanel({
   return (
     <div
       data-testid={LIVE_TRANSCRIPT_PANEL_TESTID}
-      className="mx-3 mb-2 rounded-2xl border border-white/12 bg-[rgba(12,12,16,0.55)] overflow-hidden"
-      style={surfaceStyle}
+      className={`mx-3 mb-2 rounded-2xl border border-white/12 overflow-hidden flex flex-col ${
+        flexGrow ? 'flex-1 min-h-[120px]' : ''
+      }`}
+      style={{
+        backgroundColor: 'rgba(12, 12, 16, 0.94)',
+        ...surfaceStyle,
+      }}
     >
-      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
+      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1 shrink-0">
         <span className="text-[11px] font-semibold tracking-wide overlay-text-primary">
           {title}
         </span>
       </div>
       <div
         ref={scrollRef}
-        className="max-h-[140px] min-h-[72px] overflow-y-auto px-3 pb-2.5 space-y-2 no-drag"
-        style={{ scrollbarWidth: 'thin' }}
+        className={`overflow-y-auto px-3 pb-2.5 space-y-2 no-drag ${
+          flexGrow
+            ? 'flex-1 min-h-[96px]'
+            : 'max-h-[140px] min-h-[72px]'
+        }`}
+        style={{
+          scrollbarWidth: 'thin',
+          ...(flexGrow && scrollMaxHeight
+            ? { maxHeight: scrollMaxHeight }
+            : {}),
+        }}
       >
         {turns.length === 0 ? (
           <p className="text-[12px] leading-relaxed overlay-text-muted italic">

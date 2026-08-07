@@ -217,6 +217,9 @@ export class WindowHelper {
   // that killed the earlier hover-gate attempt — it defaulted to ignore).
   private static readonly OVERLAY_DEFAULT_WIDTH = 732;
   private static readonly OVERLAY_MIN_HEIGHT = 216;
+  /** Near-full work-area height for InterviewMan-tall meeting shell (was 0.9). */
+  private static readonly OVERLAY_MAX_HEIGHT_FRACTION = 0.98;
+  private static readonly OVERLAY_BOTTOM_MARGIN = 8;
   // Gap between the pill window's bottom edge and the shell window's top edge
   // — matches the old in-window `gap-2` (8px) spacing.
   private static readonly PILL_GAP = 8;
@@ -370,13 +373,18 @@ export class WindowHelper {
     const currentY = currentBounds.y;
     const workArea = this.getDisplayWorkArea(currentBounds);
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-    const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+    const maxHeightFromTop =
+      workArea.y + workArea.height - WindowHelper.OVERLAY_BOTTOM_MARGIN - currentY;
+    const maxAllowedHeight = Math.min(
+      Math.floor(workArea.height * WindowHelper.OVERLAY_MAX_HEIGHT_FRACTION),
+      Math.max(1, maxHeightFromTop),
+    );
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth); // min 300, max 90%
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight); // min 1, max 90%
+    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
     const maxX = workArea.x + workArea.width - newWidth;
-    const maxY = workArea.y + workArea.height - newHeight;
     const newX = Math.min(Math.max(currentX, workArea.x), maxX);
-    const newY = Math.min(Math.max(currentY, workArea.y), maxY);
+    // Top-anchored: grow/shrink downward; do not lift the window when tall.
+    const newY = Math.min(Math.max(currentY, workArea.y), workArea.y + workArea.height - newHeight);
 
     if (
       Math.abs(newWidth - currentContentSize[0]) <= 1 &&
@@ -410,7 +418,15 @@ export class WindowHelper {
     const currentContentSize = this.overlayWindow.getContentSize();
     const workArea = this.getDisplayWorkArea(currentBounds);
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-    const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+    const maxHeightFromTop =
+      workArea.y +
+      workArea.height -
+      WindowHelper.OVERLAY_BOTTOM_MARGIN -
+      currentBounds.y;
+    const maxAllowedHeight = Math.min(
+      Math.floor(workArea.height * WindowHelper.OVERLAY_MAX_HEIGHT_FRACTION),
+      Math.max(1, maxHeightFromTop),
+    );
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth);
     const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
     traceOverlayResize('setOverlayDimensionsAnchored:request', {
@@ -428,8 +444,11 @@ export class WindowHelper {
 
     const maxX = workArea.x + workArea.width - newWidth;
     const newX = Math.min(Math.max(desiredX, workArea.x), maxX);
-    const maxY = workArea.y + workArea.height - newHeight;
-    const newY = Math.min(Math.max(currentBounds.y, workArea.y), maxY);
+    // Top-anchored grow downward for InterviewMan-tall shell (keep Y stable).
+    const newY = Math.min(
+      Math.max(currentBounds.y, workArea.y),
+      workArea.y + workArea.height - newHeight,
+    );
 
     if (
       Math.abs(newWidth - currentContentSize[0]) <= 1 &&
@@ -2165,7 +2184,9 @@ export class WindowHelper {
         : null;
       const workArea = this.getDisplayWorkArea(savedBounds ?? currentBounds);
       const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-      const maxAllowedHeight = Math.floor(workArea.height * 0.9);
+      const maxAllowedHeight = Math.floor(
+        workArea.height * WindowHelper.OVERLAY_MAX_HEIGHT_FRACTION,
+      );
       const targetBounds = savedBounds
         ? {
             x: Math.min(

@@ -6,6 +6,7 @@ import {
   verticalScrollCap,
   computeScrollMaxHeight,
 } from '../overlayScrollBudget.mjs';
+import { SESSION_SHELL_HEIGHT_FRACTION } from '../sessionShellVerticalBudget.mjs';
 
 describe('overlayScrollBudget', () => {
   test('clamp bounds a value into [lo, hi]', () => {
@@ -18,15 +19,15 @@ describe('overlayScrollBudget', () => {
     test('collapsed width → minHeight (320)', () => {
       assert.equal(widthDerivedScrollMax(600), 320);
     });
-    test('expanded width → maxHeight (560)', () => {
-      assert.equal(widthDerivedScrollMax(780), 560);
+    test('expanded width → maxHeight (720)', () => {
+      assert.equal(widthDerivedScrollMax(780), 720);
     });
     test('midpoint interpolates linearly', () => {
-      assert.equal(widthDerivedScrollMax(690), 440);
+      assert.equal(widthDerivedScrollMax(690), 520);
     });
     test('clamps below collapsed and above expanded', () => {
       assert.equal(widthDerivedScrollMax(400), 320);
-      assert.equal(widthDerivedScrollMax(900), 560);
+      assert.equal(widthDerivedScrollMax(900), 720);
     });
   });
 
@@ -39,16 +40,15 @@ describe('overlayScrollBudget', () => {
       );
     });
 
-    test('budget = floor(availHeight*0.9) - safetyMargin - chrome', () => {
-      // 900*0.9 = 810; -8 margin = 802; -300 chrome = 502
+    test('budget = floor(availHeight*0.98) - safetyMargin - chrome', () => {
+      // 900*0.98 = 882; -8 margin = 874; -300 chrome = 574
       assert.equal(
         verticalScrollCap({ availHeight: 900, chromeHeight: 300 }),
-        502,
+        Math.floor(900 * SESSION_SHELL_HEIGHT_FRACTION) - 8 - 300,
       );
     });
 
     test('never collapses below minScroll on a very short display', () => {
-      // 500*0.9=450; -8=442; chrome 400 → 42, floored to minScroll 120
       assert.equal(
         verticalScrollCap({ availHeight: 500, chromeHeight: 400, minScroll: 120 }),
         120,
@@ -57,23 +57,17 @@ describe('overlayScrollBudget', () => {
   });
 
   describe('computeScrollMaxHeight (the regression guard)', () => {
-    // The bug: expanded coding view + a screenshot on a short laptop screen.
-    // Chrome (TopPill + quick-actions + input + attached-screenshot preview +
-    // footer + paddings) ≈ 360px. Old behavior used the width bound (560)
-    // unconditionally → content 360+560 = 920 > 0.9*900 = 810 budget, so the
-    // window was clamped and the footer (~110px) got cropped.
     test('SHORT display: vertical cap wins, keeps footer visible', () => {
       const chrome = 360;
-      const availHeight = 900; // e.g. 1080p with menubar/dock work area, or a 900px laptop
+      const availHeight = 900;
       const got = computeScrollMaxHeight({
         width: 780,
         availHeight,
         chromeHeight: chrome,
       });
-      // vertical cap = floor(810)-8-360 = 442; width bound = 560 → min = 442
-      assert.equal(got, 442);
-      // Invariant the bug violated: chrome + scroll must fit the budget.
-      const budget = Math.floor(availHeight * 0.9);
+      const budget = Math.floor(availHeight * SESSION_SHELL_HEIGHT_FRACTION);
+      const expected = budget - 8 - chrome;
+      assert.equal(got, expected);
       assert.ok(
         chrome + got <= budget,
         `content ${chrome + got} must fit budget ${budget}`,
@@ -83,10 +77,10 @@ describe('overlayScrollBudget', () => {
     test('TALL display: width bound wins, chat looks unchanged', () => {
       const got = computeScrollMaxHeight({
         width: 780,
-        availHeight: 1400, // tall external monitor
+        availHeight: 1400,
         chromeHeight: 360,
       });
-      assert.equal(got, 560); // unchanged aesthetic max
+      assert.equal(got, 720);
     });
 
     test('attaching a screenshot (chrome grows) shrinks the scroll, not the footer', () => {
@@ -99,13 +93,13 @@ describe('overlayScrollBudget', () => {
       const withShot = computeScrollMaxHeight({
         width: 780,
         availHeight,
-        chromeHeight: 300 + 72, // ~screenshot preview strip
+        chromeHeight: 300 + 72,
       });
       assert.ok(
         withShot < base,
         `scroll should shrink when a screenshot is attached (${withShot} < ${base})`,
       );
-      const budget = Math.floor(availHeight * 0.9);
+      const budget = Math.floor(availHeight * SESSION_SHELL_HEIGHT_FRACTION);
       assert.ok((300 + 72) + withShot <= budget);
     });
 
@@ -115,7 +109,7 @@ describe('overlayScrollBudget', () => {
         availHeight: 0,
         chromeHeight: 300,
       });
-      assert.equal(got, 560);
+      assert.equal(got, 720);
     });
   });
 });

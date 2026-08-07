@@ -295,6 +295,10 @@ import {
   splitStreamingCodeLines,
 } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
+import {
+  sessionShellVerticalBudget,
+  sessionShellFlexBudgets,
+} from '../lib/sessionShellVerticalBudget.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } from '../lib/chatStreamGuard.mjs';
 import {
   applyFirstStreamingToken,
@@ -1938,20 +1942,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
   // know the display height. measureVerticalCap (below) sets the real value:
-  // floor(workArea.height*0.9) - chrome, mirroring the main-process clamp in
+  // floor(workArea.height*0.98) - chrome, mirroring the main-process clamp in
   // WindowHelper.setOverlayDimensionsAnchored. This keeps total content height
   // ≤ the budget the OS window will be granted, so the footer (model selector /
   // settings / send) can never be cropped below the clamped window edge.
   const verticalCap = useMotionValue(Infinity);
+  // InterviewMan-tall session: min shell height to work-area bottom + transcript flex.
+  const sessionShellMinHRef = useRef(0);
+  const [sessionShellMinH, setSessionShellMinH] = useState(0);
+  const [transcriptScrollMax, setTranscriptScrollMax] = useState(220);
   // scrollMaxH is the chat viewport's MAX-HEIGHT, derived from the LIVE
   // `shellWidth` motion value (the panel's actual animating width) mins'd against
   // the measured vertical budget cap. Binding it to the live width means the
   // scroll area's tall/short budget grows/shrinks IN STEP with the panel as the
-  // spring runs (widthDerivedScrollMax: 320px collapsed → 560px expanded), so the
+  // spring runs (widthDerivedScrollMax: 320px collapsed → 720px expanded), so the
   // visible chat region tracks the panel size frame-for-frame. This is a motion
   // value bound to a style, so it updates without a React re-render.
   const scrollMaxH = useTransform([shellWidth, verticalCap], ([w, cap]: number[]) =>
-    // Pass the real collapsed/expanded panel widths so the 320→560 scroll-height
+    // Pass the real collapsed/expanded panel widths so the 320→720 scroll-height
     // ramp reaches its max at the actual expanded width (732), not the default 780.
     Math.min(
       widthDerivedScrollMax(w, {
@@ -2297,12 +2305,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // in-between CSS shell width. setOverlayDimensionsAnchored therefore sees
     // widthDelta 0 on every call: a pure height-only, top-anchored resize.
     const width = OVERLAY_WINDOW_WIDTH;
-    const height = contentRef.current.offsetHeight;
+    // Prefer measured content, but never shrink below InterviewMan-tall min.
+    const height = Math.max(
+      contentRef.current.offsetHeight,
+      sessionShellMinHRef.current || 0,
+    );
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
         width,
         height,
+        sessionShellMinH: sessionShellMinHRef.current,
         attachedContextCount: attachedContext.length,
         scrollClientHeight: scrollEl?.clientHeight,
         scrollScrollHeight: scrollEl?.scrollHeight,
@@ -2322,7 +2335,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // the `verticalCap` motion value (which scrollMaxH mins against the
   // width-derived max). Without this, the chat scroll max was width-only
   // (320→560), so on a short display expanded view + an attached screenshot
-  // made total content exceed the main-process clamp (workArea.height*0.9);
+  // made total content exceed the main-process clamp (workArea.height*0.98);
   // the OS window was clamped but the overflow-hidden shell laid out taller,
   // cropping the footer (model selector / settings / send) below the edge.
   //
@@ -2331,9 +2344,47 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // input area, attached-screenshot strip, footer, paddings). It is invariant
   // under scroll-height changes, so feeding it back to bound the scroll height
   // is not circular. availHeight uses the display the window sits on.
+  const measureSessionShellTall = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const availHeight = window.screen?.availHeight ?? 0;
+    if (!availHeight) return;
+    const screenHeight = window.screen?.height ?? availHeight;
+    const menubarApprox = Math.max(0, screenHeight - availHeight);
+    const topInWorkArea = Math.max(
+      0,
+      (typeof window.screenY === 'number' ? window.screenY : 0) - menubarApprox,
+    );
+    const { targetHeight } = sessionShellVerticalBudget({
+      workAreaY: 0,
+      workAreaHeight: availHeight,
+      windowTopY: topInWorkArea,
+      bottomMargin: 8,
+    });
+    sessionShellMinHRef.current = targetHeight;
+    setSessionShellMinH(targetHeight);
+
+    const contentEl = contentRef.current;
+    const scrollEl = scrollContainerRef.current;
+    const transcriptEl = contentEl?.querySelector(
+      '[data-testid="live-transcript-panel"]',
+    ) as HTMLElement | null;
+    let chromeHeight = 280;
+    if (contentEl) {
+      const scrollH = scrollEl?.clientHeight ?? 0;
+      const transcriptH = transcriptEl?.offsetHeight ?? 0;
+      chromeHeight = Math.max(120, contentEl.offsetHeight - scrollH - transcriptH);
+    }
+    const { transcriptMax } = sessionShellFlexBudgets({
+      targetHeight,
+      chromeHeight,
+    });
+    setTranscriptScrollMax(transcriptMax);
+  }, []);
+
   const measureVerticalCap = useCallback(() => {
     const scrollEl = scrollContainerRef.current;
     const contentEl = contentRef.current;
+    measureSessionShellTall();
     // No chat panel mounted → nothing to cap; let the width bound apply.
     if (!scrollEl || !contentEl) {
       verticalCap.set(Infinity);
@@ -2349,11 +2400,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         contentOffsetHeight: contentEl.offsetHeight,
         scrollClientHeight: scrollEl.clientHeight,
         nextCap,
+        sessionShellMinH: sessionShellMinHRef.current,
         attachedContextCount: attachedContext.length,
       });
     }
     verticalCap.set(nextCap);
-  }, [attachedContext.length, verticalCap]);
+  }, [attachedContext.length, verticalCap, measureSessionShellTall]);
 
   // NOTE: the old per-frame "chase" subscriber that pushed the live shell width
   // to setBounds every frame is GONE. The OS window is a fixed width (732) for
@@ -7484,7 +7536,7 @@ Provide only the answer, nothing else.`;
     userSttSource.source === 'desktop' || userSttSource.source === 'phone';
   const hasStatusPill =
     shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible || showUserSttSourcePill;
-  const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
+  const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-[rgba(28,30,36,0.92)] border-white/12'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
   // expanded at least once (set via onAnimationComplete). On the first content
@@ -7632,6 +7684,9 @@ Provide only the answer, nothing else.`;
                 // (below), and syntax highlighting is memoized on the code STRING +
                 // language so a width change re-wraps text without re-tokenizing.
                 width: shellWidth,
+                // InterviewMan-tall: grow shell to work-area bottom so Transcription
+                // / chat flex regions have room (content-fit alone stays short).
+                minHeight: sessionShellMinH > 0 ? sessionShellMinH : undefined,
                 // contain: layout/style isolates this box's layout/style from the
                 // ancestor chain so the per-frame width reflow (and any content
                 // growth) does not dirty layout up to the document — the reflow is
@@ -8563,6 +8618,8 @@ Provide only the answer, nothing else.`;
                     surfaceStyle={appearance.transcriptStyle}
                     title={t('Transcription')}
                     placeholder={t('Transcription will appear here…')}
+                    flexGrow
+                    scrollMaxHeight={transcriptScrollMax}
                   />
                 ) : null}
 

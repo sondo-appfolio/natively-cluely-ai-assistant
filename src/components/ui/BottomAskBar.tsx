@@ -48,7 +48,7 @@ export default function BottomAskBar({
   return (
     <div
       data-testid={BOTTOM_ASK_BAR_TESTID}
-      className={`flex items-center gap-2 rounded-2xl border border-white/15 bg-[rgba(18,18,22,0.88)] px-2 py-1.5 ${className}`}
+      className={`flex items-center gap-2 rounded-2xl border border-white/15 bg-[rgba(18,18,22,0.96)] px-2 py-1.5 ${className}`}
     >
       <button
         type="button"
