@@ -80,29 +80,12 @@ const MockAppInterface = () => {
                 {/* Main Window */}
                 <div className="relative w-full backdrop-blur-[30px] border border-border-subtle rounded-[24px] overflow-hidden flex flex-col bg-bg-item-surface shadow-2xl">
 
-                    {/* Rolling Transcript Bar — replica of RollingTranscript.tsx */}
-                    <div className="relative w-[90%] mx-auto pt-2">
-                        <div
-                            className="overflow-hidden whitespace-nowrap text-right"
-                            style={{ maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)' }}
-                        >
-                            <span className="text-text-secondary inline-flex items-center text-[13px] italic leading-7 opacity-60">
-                                ...and I'd also consider a distributed cache layer for horizontal scaling
-                                <span className="inline-flex items-center ml-2">
-                                    <span className="w-1 h-1 bg-green-500/60 rounded-full animate-pulse" />
-                                </span>
-                            </span>
-                        </div>
-                    </div>
-
                     {/* Chat History */}
                     <div className="p-4 space-y-3 pb-2 flex-1 overflow-y-auto max-h-[220px]">
                         <div className="flex justify-start">
                             <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal text-text-primary">
-                                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider text-text-secondary opacity-70">
-                                    Interviewer
-                                </div>
-                                <span className="text-text-secondary italic">So how would you optimize the current algorithm?</span>
+                                <span className="font-semibold text-emerald-500 block mb-1 text-[12px]">Suggestion</span>
+                                <span>So how would you optimize the current algorithm?</span>
                             </div>
                         </div>
                         <div className="flex justify-end">
@@ -124,6 +107,15 @@ const MockAppInterface = () => {
                                 </button>
                             );
                         })}
+                    </div>
+
+                    {/* Bottom Transcription panel (replaces top rolling STT) */}
+                    <div className="mx-3 mb-2 rounded-2xl border border-border-subtle bg-bg-item-surface/80 px-3 py-2">
+                        <div className="text-[11px] font-semibold text-text-primary mb-1">Transcription</div>
+                        <p className="text-[12px] leading-relaxed text-text-primary">
+                            <span className="font-semibold text-sky-500 mr-1.5">Speaker 1:</span>
+                            So how would you optimize the current algorithm?
+                        </p>
                     </div>
 
                     {/* Input Area */}

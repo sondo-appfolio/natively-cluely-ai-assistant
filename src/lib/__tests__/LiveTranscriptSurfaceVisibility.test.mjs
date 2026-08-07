@@ -61,7 +61,10 @@ describe('NativelyInterface mounts LiveTranscriptPanel via preference', () => {
     assert.match(niSrc, /live-transcript-panel|LIVE_TRANSCRIPT_PANEL|Transcription will appear/);
   });
 
-  test('does not mount RollingTranscript as the primary surface', () => {
+  test('does not mount RollingTranscript or keep top rolling STT state', () => {
     assert.doesNotMatch(niSrc, /<RollingTranscript[\s>]/);
+    assert.doesNotMatch(niSrc, /mergeRollingTranscript/);
+    assert.doesNotMatch(niSrc, /setRollingTranscript|rollingTranscript/);
+    assert.doesNotMatch(niSrc, /applyRollingPartialPreview/);
   });
 });

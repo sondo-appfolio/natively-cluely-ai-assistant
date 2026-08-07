@@ -25,10 +25,6 @@ import {
   decideSheetOpenPassthrough,
   decideSheetVisibilityToggle,
 } from '../../electron/services/shortcutsSheet';
-import {
-  mergeRollingTranscriptFinal,
-  mergeRollingTranscriptPartial,
-} from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
 
@@ -1386,15 +1382,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     answerPanelPinnedRef.current = answerPanelPinned;
   }, [answerPanelPinned]);
 
-  const [rollingTranscript, setRollingTranscript] = useState(''); // legacy single-line buffer (kept for clear/end paths)
   const [liveTranscriptTurns, setLiveTranscriptTurns] = useState<
     Array<{ id: string; speaker: string; label: string; text: string; isFinal: boolean }>
   >([]);
-  const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
-  // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
-  const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRollingPartialRef = useRef<string | null>(null);
-  const interviewerSpeakingRef = useRef(false);
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
@@ -3249,11 +3239,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         cancelAnimationFrame(streamingCodeRafRef.current);
         streamingCodeRafRef.current = null;
       }
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
-      pendingRollingPartialRef.current = null;
     };
   }, []);
   // ────────────────────────────────────────────────────────────────────────
@@ -3435,15 +3420,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setManualTranscript('');
       setVoiceInput('');
       setIsProcessing(false);
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
-      pendingRollingPartialRef.current = null;
-      setRollingTranscript('');
       setLiveTranscriptTurns([]);
-      setIsInterviewerSpeaking(false);
-      interviewerSpeakingRef.current = false;
       // Reset STT status to 'awaiting-audio' on session reset. The previous
       // session's 'connected' state must not carry over into a new meeting
       // before we've verified live audio is flowing on the new pipeline.
@@ -4516,32 +4493,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
   // ──────────────────────────────────────────────────────────────────────────
 
-  const applyRollingPartialPreview = useCallback((partialText: string) => {
-    pendingRollingPartialRef.current = partialText;
-    if (rollingPartialDebounceRef.current !== null) {
-      clearTimeout(rollingPartialDebounceRef.current);
-    }
-    rollingPartialDebounceRef.current = setTimeout(() => {
-      rollingPartialDebounceRef.current = null;
-      const text = pendingRollingPartialRef.current;
-      pendingRollingPartialRef.current = null;
-      if (text == null) return;
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
-    }, 80);
-  }, []);
-
-  const flushRollingPartialPreview = useCallback(() => {
-    if (rollingPartialDebounceRef.current !== null) {
-      clearTimeout(rollingPartialDebounceRef.current);
-      rollingPartialDebounceRef.current = null;
-    }
-    const text = pendingRollingPartialRef.current;
-    pendingRollingPartialRef.current = null;
-    if (text != null) {
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
-    }
-  }, []);
-
   // Connect to Native Audio Backend — deps must NOT include isExpanded (see clarify effect).
   useEffect(() => {
     const cleanups: (() => void)[] = [];
@@ -4600,7 +4551,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return;
         }
 
-        // Bottom Transcription panel — speaker-labeled turns (Speaker 1 / 2).
+        // Bottom Transcription panel only — no top rolling STT surface.
         setLiveTranscriptTurns((prev) =>
           applyLiveTranscriptTurn(prev, {
             speaker: transcript.speaker,
@@ -4608,25 +4559,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             final: transcript.final === true,
           }),
         );
-
-        // Keep rolling buffer for legacy helpers / clear-on-end.
-        if (!transcript.final) {
-          if (!interviewerSpeakingRef.current) {
-            interviewerSpeakingRef.current = true;
-            setIsInterviewerSpeaking(true);
-          }
-          applyRollingPartialPreview(transcript.text);
-          return;
-        }
-
-        flushRollingPartialPreview();
-        interviewerSpeakingRef.current = false;
-        setIsInterviewerSpeaking(false);
-        setRollingTranscript((prev) => mergeRollingTranscriptFinal(prev, transcript.text));
-
-        setTimeout(() => {
-          setIsInterviewerSpeaking(false);
-        }, 3000);
       }),
     );
 
@@ -4958,13 +4890,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
     return () => {
-      if (rollingPartialDebounceRef.current !== null) {
-        clearTimeout(rollingPartialDebounceRef.current);
-        rollingPartialDebounceRef.current = null;
-      }
       cleanups.forEach((fn) => fn());
     };
-  }, [queueToken, flushToken, applyRollingPartialPreview, flushRollingPartialPreview, pinAnswerPanel, finalizeStreamingByIntent, prepareIntelligenceStreamPlaceholder]);
+  }, [queueToken, flushToken, pinAnswerPanel, finalizeStreamingByIntent, prepareIntelligenceStreamPlaceholder]);
 
   // Stable mount-only effect for screenshot listeners.
   // These MUST NOT be inside the [isExpanded] effect — when a screenshot is
@@ -7514,13 +7442,6 @@ Provide only the answer, nothing else.`;
     }
   }, []);
 
-  // ── Derived STT status for the rolling transcript indicator (interviewer channel) ──
-  const interviewerSttIndicatorStatus = sttInterviewerStatus;
-  // Strip consecutive error count from display — show only in expanded diagnostics
-  const interviewerSttIndicatorError = sttInterviewerError?.replace(
-    /\s*\(\d+ consecutive errors\):?/gi,
-    '',
-  );
   const sttSummary = getSttSummary(
     sttUserStatus,
     sttInterviewerStatus,
@@ -8088,9 +8009,7 @@ Provide only the answer, nothing else.`;
               )}
 
               {/* Phase 3 — Dynamic action card row (Cluely-style live triggers).
-                                Appears between status pills and rolling transcript so users see
-                                actionable suggestions in their primary scan path. Bar self-hides
-                                when no actions are present. */}
+                                Appears under status pills. Bar self-hides when no actions. */}
               <DynamicActionBar
                 onAcceptAction={(action: DynamicActionPayload) => {
                   void handleWhatToSay(action.promptInstruction);
