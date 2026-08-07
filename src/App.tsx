@@ -26,7 +26,11 @@ import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrche
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { AlertCircle, RefreshCw } from "lucide-react"
-import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
+import {
+  getDefaultOverlayOpacity,
+  migrateStoredOverlayOpacity,
+  isStoredOverlayOpacityUserSet,
+} from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
@@ -234,13 +238,7 @@ const App: React.FC = () => {
   }, [activeManagerPanel]);
   // Overlay opacity — only meaningful when isOverlayWindow, but stored centrally
   // so it can be initialized once from localStorage and updated via IPC.
-  const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
-    const stored = localStorage.getItem('natively_overlay_opacity');
-    const parsed = stored ? parseFloat(stored) : NaN;
-    // Treat missing value or the old default (0.65) as "not user-set"
-    const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
-    return isUserSet ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
-  });
+  const [overlayOpacity, setOverlayOpacity] = useState<number>(() => migrateStoredOverlayOpacity());
 
   const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
 
@@ -576,7 +574,8 @@ const App: React.FC = () => {
     if (!isOverlayWindow || !window.electronAPI?.onThemeChanged) return;
     return window.electronAPI.onThemeChanged(() => {
       const stored = localStorage.getItem('natively_overlay_opacity');
-      if (!stored) {
+      const parsed = stored ? parseFloat(stored) : NaN;
+      if (!isStoredOverlayOpacityUserSet(parsed)) {
         setOverlayOpacity(getDefaultOverlayOpacity());
       }
     });

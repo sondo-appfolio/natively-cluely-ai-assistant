@@ -5,11 +5,9 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
-    clampOverlayOpacity,
-    getDefaultOverlayOpacity,
     getGlassOverlayAppearance,
     getOverlayAppearance,
-    OVERLAY_OPACITY_DEFAULT,
+    migrateStoredOverlayOpacity,
 } from '../lib/overlayAppearance';
 
 const SettingsPopup = () => {
@@ -53,12 +51,7 @@ const SettingsPopup = () => {
     // already does for itself in this exact component, keeps this correct
     // without touching App.tsx (which has unrelated work in progress on it
     // right now — see git status).
-    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
-        const stored = localStorage.getItem('natively_overlay_opacity');
-        const parsed = stored ? parseFloat(stored) : NaN;
-        const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
-        return isUserSet ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
-    });
+    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => migrateStoredOverlayOpacity());
 
     // Load credentials func
     const loadCredentials = async () => {
