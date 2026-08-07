@@ -14,7 +14,9 @@ Manual acceptance path for `interviewman-listen` (ADR 0014 control map, ADR 0015
 ## Desktop — happy path
 
 - [ ] Start a meeting with STT configured → listening arms without clicking Ask
-- [ ] Live transcript shows interviewer (system audio) and user-mic text while armed
+- [ ] Bottom **Transcription** panel visible while armed when Show Transcription is on (placeholder until speech)
+- [ ] Live turns labeled **Speaker 1** (system/interviewer) and **Speaker 2** (user mic) as text streams
+- [ ] Show Transcription off hides the bottom Transcription panel
 - [ ] Red square **pauses** listening → no new STT capture; meeting stays open
 - [ ] Red square **resumes** listening → live text continues
 - [ ] **Ask/Submit chip is gone** from quick actions
