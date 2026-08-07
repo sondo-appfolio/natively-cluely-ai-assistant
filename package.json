@@ -47,6 +47,7 @@
     "e2e:sd-requirements-gate": "NATIVELY_E2E=1 ./node_modules/.bin/electron scripts/e2e-sd-requirements-gate.js",
     "e2e:sd-interview-sim": "NATIVELY_E2E=1 ./node_modules/.bin/electron scripts/e2e-sd-interview-sim.js",
     "e2e:sd-overlay-interview": "node scripts/e2e/sd-overlay-interview.mjs",
+    "e2e:interviewman-listen": "node scripts/e2e/interviewman-listen.mjs",
     "sd-interview-sim:t2": "NATIVELY_E2E=1 ./node_modules/.bin/electron scripts/sd-interview-sim-t2.js",
     "sd-interview-sim:repl": "node scripts/sd-interview-sim-repl.js",
     "sd-interview-sim:digest": "node scripts/sd-interview-sim-digest.js",

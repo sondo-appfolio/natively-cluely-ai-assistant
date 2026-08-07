@@ -7,14 +7,16 @@ Manual acceptance path for `interviewman-listen` (ADR 0014 control map, ADR 0015
 - InterviewMan retention timers / win-first memory product behavior
 - Phone-hosted LLM, RAG, LESSON retrieval, or What-to-Answer brain on the phone
 - Whole-app pixel-perfect InterviewMan clone (only listen / transcript / transport / Ask-bar surfaces)
-- SD overlay interview e2e no-audio harness as a live-STT suite
+- SD overlay interview e2e no-audio harness as a live-STT suite (use local `e2e:interviewman-listen` instead — see CONTEXT automated e2e terms / ADR 0016)
 
 ---
 
 ## Desktop — happy path
 
 - [ ] Start a meeting with STT configured → listening arms without clicking Ask
-- [ ] Bottom **Transcription** panel visible while armed when Show Transcription is on (placeholder until speech)
+- [ ] Overlay shell is near-opaque charcoal over a bright IDE (code not readable through the panel); matches Ask-bar darkness
+- [ ] Session column reaches near the bottom of the desktop work area (not a short mid-screen card)
+- [ ] Bottom **Transcription** panel visible while armed when Show Transcription is on (placeholder until speech); panel flexes taller in the tall shell
 - [ ] Live turns labeled **Speaker 1** (system/interviewer) and **Speaker 2** (user mic) as text streams
 - [ ] Show Transcription off hides the bottom Transcription panel
 - [ ] Red square **pauses** listening → no new STT capture; meeting stays open

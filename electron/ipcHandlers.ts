@@ -13004,6 +13004,82 @@ export function initializeIpcHandlers(appState: AppState): void {
      * generate-what-to-say (sdRequirementsUiAdvance). Do NOT use __e2e__:ask mid-scenario
      * (it calls im.reset()).
      */
+    /**
+     * Arm InterviewMan listen overlay for e2e without mic TCC / SD gate chrome.
+     * Distinct from `__e2e__:arm-sd-overlay-gate` (NO-AUDIO SD Requirements path).
+     * Glossary: interviewman-listen-e2e-stt-fidelity (ADR 0016).
+     */
+    safeHandle(
+      '__e2e__:arm-listen-meeting',
+      async (
+        _,
+        params?: {
+          mode?: 'armed' | 'unready';
+          title?: string;
+          turns?: Array<{ speaker?: string; text?: string; final?: boolean }>;
+        },
+      ) => {
+        try {
+          const opened = appState.startListenMeetingForE2e({
+            mode: params?.mode === 'unready' ? 'unready' : 'armed',
+            title: params?.title || 'interviewman-listen-e2e',
+          });
+
+          const turns = Array.isArray(params?.turns) ? params!.turns! : [];
+          let fed = 0;
+          for (const turn of turns) {
+            const text = String(turn.text || '').trim();
+            if (!text) continue;
+            const speakerRaw = String(turn.speaker || 'interviewer');
+            const speaker =
+              speakerRaw === 'user' || speakerRaw === 'Speaker 2' ? 'user' : 'interviewer';
+            const fedOk = appState.feedOverlayLiveTranscriptForE2e({
+              speaker,
+              text,
+              final: turn.final !== false,
+            });
+            if (fedOk.success) fed += 1;
+          }
+
+          return {
+            success: true,
+            meetingId: opened.meetingId,
+            via: opened.via,
+            listenTransport: opened.listenTransport,
+            fed,
+          };
+        } catch (e: any) {
+          console.error('[E2E] arm-listen-meeting error:', e);
+          return { success: false, error: e?.message || String(e) };
+        }
+      },
+    );
+
+    safeHandle(
+      '__e2e__:inject-live-transcript',
+      async (
+        _,
+        seg?: { speaker?: string; text?: string; final?: boolean; confidence?: number },
+      ) => {
+        try {
+          const text = String(seg?.text || '').trim();
+          if (!text) return { success: false, error: 'empty_text' };
+          const speakerRaw = String(seg?.speaker || 'interviewer');
+          const speaker =
+            speakerRaw === 'user' || speakerRaw === 'Speaker 2' ? 'user' : 'interviewer';
+          return appState.feedOverlayLiveTranscriptForE2e({
+            speaker,
+            text,
+            final: seg?.final !== false,
+            confidence: seg?.confidence,
+          });
+        } catch (e: any) {
+          console.error('[E2E] inject-live-transcript error:', e);
+          return { success: false, error: e?.message || String(e) };
+        }
+      },
+    );
+
     safeHandle(
       '__e2e__:arm-sd-overlay-gate',
       async (

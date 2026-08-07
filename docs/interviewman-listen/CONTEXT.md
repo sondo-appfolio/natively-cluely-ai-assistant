@@ -46,6 +46,10 @@ _Avoid_: Silent empty transcript when provider is none; Answers arming listen; a
 Layout and control jobs match InterviewMan (top pill, bottom Ask bar, settings glass structure, red-square transport). Colors/typography may use Natively tokens when that improves readability — not a pixel-perfect accent clone.
 _Avoid_: Unbounded whole-app pixel clone; layout drift that breaks the control map
 
+**interviewman-dark-tall-shell**:
+Default meeting overlay is near-opaque charcoal (Ask-bar baseline, factory opacity ~0.95) so bright IDEs cannot wash the panel light; session column grows top-anchored to near the work-area bottom (~0.98) with Transcription/chat flex room.
+_Avoid_: Frosted low-alpha glass as the meeting default; short content-fit cards that stop mid-desktop; transparent transcriptStyle overriding the Transcription fill
+
 **interviewman-shell-cluely-keep-list**:
 When adopting the InterviewMan shell, keep: What-to-Answer / Assist streams; Screenshot → answer; RAG / LESSON / context `@`; Phone Mirror / stealth.
 _Avoid_: Stripping those surfaces for chrome-only parity; defaulting Ambient AI Chat into the keep-list without a separate lock
@@ -64,6 +68,48 @@ _Avoid_: Behavior-only without layout parity on those surfaces; treating phone r
 The phone may run STT (mic / phone-captured audio) as an alternate capture source under the same listen-transport model. Transcript text feeds the desktop session; desktop remains LLM/planner host (ADR 0015 amending 0011).
 _Avoid_: Treating phone STT as phone-hosted What-to-Answer; requiring desktop mic for all user speech when phone STT is armed
 
+### Automated e2e (local)
+
+**interviewman-listen-e2e-family**:
+New Electron Playwright family: npm script `e2e:interviewman-listen` → `scripts/e2e/interviewman-listen.mjs` with helpers under `scripts/lib/interviewman-listen/`. Forever separate from `e2e:sd-overlay-interview`. Never use `startOverlaySessionWithoutAudioForE2e` or `__e2e__:arm-sd-overlay-gate` as live-STT / listen proof.
+_Avoid_: Extending the SD overlay suite into listen parity; relying only on Vite `tests/e2e` `page.goto` for overlay listen chrome
+
+**interviewman-listen-e2e-launch**:
+Launch via Playwright `_electron` in that standalone script, copying sd-overlay’s launch/env/temp-userData/window-find pattern (`NATIVELY_E2E=1`). Do not put this suite under `playwright.config.ts` Vite Chrome `tests/e2e`.
+_Avoid_: Assuming `npm run test:e2e` already boots the Electron overlay
+
+**interviewman-listen-e2e-stt-fidelity**:
+Default local run arms via `__e2e__:arm-listen-meeting`: opens a meeting and arms **listen-transport** without SD gate chrome and without requiring mic/system-audio devices. Chrome asserts on that path. Post-arm controlled feed may prove Speaker 1/2 **panel wiring** only — never Settings sandbox live-STT fidelity and never real capture proof. Optional real capture: `RUN_INTERVIEWMAN_LISTEN_REAL_AUDIO=1`.
+_Avoid_: SD no-audio arm as listen proof; TCC required for the default green path; treating inject as Settings sandbox or live mic proof
+
+**interviewman-listen-e2e-desktop-scope**:
+First slice covers in-meeting overlay only (TopPill transport, Transcription panel, bottom Ask bar, end-meeting, unready banner). Settings Audio `live-stt-sandbox*` stays later / manual QA.
+_Avoid_: Blocking v1 on Settings sandbox e2e
+
+**interviewman-listen-e2e-control-map-slice**:
+Mandatory after armed overlay: `listen-transport-toggle` armed; `live-transcript-panel` when Show Transcription on; bottom Ask bar controls present; `ask-submit-chip` absent; Think and typed ↑ leave transport armed; pause unarms without ending meeting; `end-meeting` tears down. Optional: Speaker 1/2 text after controlled feed.
+_Avoid_: SD gate testids as listen proof; requiring Assist LLM success for green
+
+**interviewman-listen-e2e-shell-asserts**:
+First-slice e2e does not assert pixel opacity or “IDE not readable through panel.” **interviewman-dark-tall-shell** stays unit-tested (height fraction ≥ 0.98, dark factory opacity ~0.95); charcoal/tall readability remains manual QA.
+_Avoid_: Screenshot baselines or opacity gates in v1 listen e2e
+
+**interviewman-listen-e2e-edge-paths**:
+Slice 1 must cover STT-unready → `listen-transport-unready`, no fake empty listening. Ambient-ON skip-capture is slice 2 unless a preference fixture makes it free. Never treat SD no-audio arm as Ambient.
+_Avoid_: Happy-path-only forever; using SD no-audio as Ambient stand-in
+
+**interviewman-listen-e2e-phone-scope**:
+This suite is desktop-overlay only. Phone Mirror control/STT-source parity stays on unit tests + manual QA.
+_Avoid_: Blocking desktop listen e2e on mobile/WebView automation
+
+**interviewman-listen-e2e-ci-gate**:
+No GitHub Actions or remote CI job. Operators run locally: `RUN_INTERVIEWMAN_LISTEN=1 npm run e2e:interviewman-listen` (skip exit 0 when unset). Launch sets `NATIVELY_E2E=1`. Do not reuse `SD_OVERLAY_*` flags. Optional local real audio: `RUN_INTERVIEWMAN_LISTEN_REAL_AUDIO=1`.
+_Avoid_: Adding a GitHub workflow/PR/schedule job; overloading SD overlay env flags
+
+**interviewman-listen-e2e-selectors**:
+Use existing testids (`listen-transport-*`, `live-transcript-panel`, `bottom-ask-*`, `overlay-chat-input`, `end-meeting`). Speaker lines via text `Speaker 1:` / `Speaker 2:`. Do not target `live-transcript-surface` (RollingTranscript) or SD gate testids as primary listen proof. Assert `ask-submit-chip` absent.
+_Avoid_: Blocking v1 on new per-turn speaker testids
+
 ## Example dialogue
 
 **Dev:** So we delete Ask since the red square already listens like InterviewMan?  
@@ -75,7 +121,9 @@ _Avoid_: Treating phone STT as phone-hosted What-to-Answer; requiring desktop mi
 **Dev:** Phone still has the old Ask/Submit mic button?  
 **Expert:** Remap under **phone-control-map-parity** so it matches desktop.  
 **Dev:** Pixel-perfect yellow/blue from the screenshots?  
-**Expert:** **interviewman-visual-parity-scope** is layout/jobs first; Natively tokens OK for readability.
+**Expert:** **interviewman-visual-parity-scope** is layout/jobs first; Natively tokens OK for readability.  
+**Dev:** Can we extend `e2e:sd-overlay-interview` for the Transcription panel?  
+**Expert:** No — **interviewman-listen-e2e-family**. SD no-audio arm is not listen proof; use `__e2e__:arm-listen-meeting` under **interviewman-listen-e2e-stt-fidelity**, local-only (**interviewman-listen-e2e-ci-gate**).
 
 ## Flagged ambiguities
 

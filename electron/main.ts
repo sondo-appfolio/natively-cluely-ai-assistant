@@ -3225,7 +3225,10 @@ export class AppState {
         );
       }
     } else if (sttProvider === 'deepgram') {
-      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
+      // Prefer the encrypted credential store; fall back to .env for local/dev.
+      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey()
+        || (process.env.DEEPGRAM_API_KEY || '').trim()
+        || undefined;
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
         const dg = new DeepgramStreamingSTT(apiKey);
@@ -5659,18 +5662,12 @@ export class AppState {
 
   /**
    * E2E-only: open overlay + meeting session WITHOUT mic TCC / audio pipeline.
-   * Used by `e2e:sd-overlay-interview` so gate chrome can arm on schedule CI
-   * without hanging on macOS permission dialogs. No-op / throw outside NATIVELY_E2E.
+   * Shared by SD overlay NO-AUDIO arm and listen-parity arm (distinct via + transport).
    */
-  public startOverlaySessionWithoutAudioForE2e(metadata?: any): {
-    success: boolean;
-    meetingId: string;
-    via: 'e2e-no-audio';
-  } {
+  private openE2eOverlayMeetingSession(metadata?: any): { meetingId: string } {
     if (process.env.NATIVELY_E2E !== '1') {
-      throw new Error('startOverlaySessionWithoutAudioForE2e is NATIVELY_E2E-only');
+      throw new Error('openE2eOverlayMeetingSession is NATIVELY_E2E-only');
     }
-    console.log('[Main] E2E overlay session (no audio / no mic TCC)...', metadata);
 
     if (this._pendingTeardown) {
       // Best-effort: do not await mic teardown forever in e2e; clear handle.
@@ -5719,12 +5716,102 @@ export class AppState {
     this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
     this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
 
+    return { meetingId: String(meetingMeta.id) };
+  }
+
+  /**
+   * E2E-only: open overlay + meeting session WITHOUT mic TCC / audio pipeline.
+   * Used by `e2e:sd-overlay-interview` so gate chrome can arm on schedule CI
+   * without hanging on macOS permission dialogs. No-op / throw outside NATIVELY_E2E.
+   * Does NOT apply listen-transport arming — listen suite uses startListenMeetingForE2e.
+   */
+  public startOverlaySessionWithoutAudioForE2e(metadata?: any): {
+    success: boolean;
+    meetingId: string;
+    via: 'e2e-no-audio';
+  } {
+    if (process.env.NATIVELY_E2E !== '1') {
+      throw new Error('startOverlaySessionWithoutAudioForE2e is NATIVELY_E2E-only');
+    }
+    console.log('[Main] E2E overlay session (no audio / no mic TCC)...', metadata);
+    const { meetingId } = this.openE2eOverlayMeetingSession(metadata);
     // Deliberately skip ensureMacMicrophoneAccess + audio init — inject path only.
     return {
       success: true,
-      meetingId: String(meetingMeta.id),
+      meetingId,
       via: 'e2e-no-audio',
     };
+  }
+
+  /**
+   * E2E-only: open overlay meeting + apply listen-transport without capture devices.
+   * Used by `e2e:interviewman-listen`. Must NOT be used by SD overlay gate e2e.
+   * Capture pipelines are not started (TCC-safe); UI sees armed/unready state.
+   */
+  public startListenMeetingForE2e(params?: {
+    title?: string;
+    mode?: 'armed' | 'unready';
+  }): {
+    success: boolean;
+    meetingId: string;
+    via: 'e2e-arm-listen';
+    listenTransport: ListenTransportSnapshot;
+  } {
+    if (process.env.NATIVELY_E2E !== '1') {
+      throw new Error('startListenMeetingForE2e is NATIVELY_E2E-only');
+    }
+    const mode = params?.mode === 'unready' ? 'unready' : 'armed';
+    console.log('[Main] E2E listen meeting arm (no capture devices)...', { mode, title: params?.title });
+
+    const { meetingId } = this.openE2eOverlayMeetingSession({
+      doNotPersist: true,
+      title: params?.title || 'interviewman-listen-e2e',
+    });
+
+    const transportSnap = listenTransportOnMeetingStart({
+      ambientChatEnabled: false,
+      sttReady: mode !== 'unready',
+    });
+    // Force capture off for e2e — state/reason still reflect armed vs unready for UI.
+    const e2eSnap: ListenTransportSnapshot = {
+      ...transportSnap,
+      captureShouldRun: false,
+    };
+    this.applyListenTransportSnapshot(e2eSnap);
+    this.applyUserSttSource(armDesktopUserSttSource(this._userSttSource));
+
+    return {
+      success: true,
+      meetingId,
+      via: 'e2e-arm-listen',
+      listenTransport: this._listenTransport,
+    };
+  }
+
+  /**
+   * E2E-only: feed overlay LiveTranscriptPanel via the same IPC path as real STT.
+   * Panel wiring only — not Settings sandbox or mic fidelity proof.
+   */
+  public feedOverlayLiveTranscriptForE2e(seg: {
+    speaker: string;
+    text: string;
+    final?: boolean;
+    confidence?: number;
+  }): { success: boolean } {
+    if (process.env.NATIVELY_E2E !== '1') {
+      throw new Error('feedOverlayLiveTranscriptForE2e is NATIVELY_E2E-only');
+    }
+    const text = String(seg?.text || '').trim();
+    if (!text) return { success: false };
+    const speaker = String(seg.speaker || 'interviewer');
+    this.sendThrottledTranscript({
+      speaker,
+      text,
+      timestamp: Date.now(),
+      final: seg.final !== false,
+      confidence: typeof seg.confidence === 'number' ? seg.confidence : 0.9,
+    });
+    return { success: true };
   }
 
   public async startMeeting(metadata?: any): Promise<void> {
@@ -7960,6 +8047,26 @@ async function initializeApp() {
       // Keep the env var in sync with what we actually adopted, so the Google
       // SDK's own ADC lookup cannot pick a different (rejected) file.
       process.env.GOOGLE_APPLICATION_CREDENTIALS = adoptedPath;
+    }
+  }
+
+  // Adopt Deepgram STT from .env (DEEPGRAM_API_KEY / STT_PROVIDER). The runtime
+  // path reads CredentialsManager, not process.env, so without this a key sitting
+  // only in .env never reaches DeepgramStreamingSTT. Persist into the store so
+  // Settings shows "Saved" and Spotlight launches (no dotenv) still work after
+  // the first env-backed boot. STT_PROVIDER=deepgram forces the provider on
+  // startup — remove that line from .env to manage the provider only in Settings.
+  {
+    const cm = CredentialsManager.getInstance();
+    const envDg = (process.env.DEEPGRAM_API_KEY || '').trim();
+    if (envDg && cm.getDeepgramApiKey() !== envDg) {
+      const persisted = cm.setDeepgramApiKey(envDg);
+      console.log(`[Init] Adopted DEEPGRAM_API_KEY from env (persisted=${persisted})`);
+    }
+    const envStt = (process.env.STT_PROVIDER || '').trim().toLowerCase();
+    if (envStt === 'deepgram' && cm.getSttProvider() !== 'deepgram') {
+      const persisted = cm.setSttProvider('deepgram');
+      console.log(`[Init] STT provider set to deepgram from env (persisted=${persisted})`);
     }
   }
 
