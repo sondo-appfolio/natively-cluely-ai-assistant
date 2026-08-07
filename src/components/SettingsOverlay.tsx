@@ -115,14 +115,6 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                     <div ref={shellRef} className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
                         {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
-                        {/* Rolling Transcript Bar */}
-                        <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
-                            <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className="overlay-text-muted mr-2 font-semibold">{t('Interviewer')}</span>
-                                <span className="opacity-95">{t('So how would you optimize the current algorithm?')}</span>
-                            </p>
-                        </div>
-
                         {/* Chat History Mock */}
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
                             <div className="flex justify-start">
@@ -131,6 +123,15 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                     {t('A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).')}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Bottom Transcription panel mock (replaces top rolling STT) */}
+                        <div className="mx-3 mb-2 rounded-2xl border border-white/12 bg-black/40 px-3 py-2" style={appearance.transcriptStyle}>
+                            <div className="text-[11px] font-semibold overlay-text-primary mb-1">{t('Transcription')}</div>
+                            <p className="text-[12px] leading-relaxed">
+                                <span className="font-semibold text-sky-300/90 mr-1.5">Speaker 1:</span>
+                                <span className="overlay-text-primary">{t('So how would you optimize the current algorithm?')}</span>
+                            </p>
                         </div>
 
                         {/* Quick Actions */}
