@@ -54,13 +54,17 @@ class FakeSession {
 }
 
 function enableDurable(on) {
+  // Default is ON (SWE-MEMORY); force OFF via env=0, force ON via env=1.
   if (on) process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '1';
-  else delete process.env.NATIVELY_DURABLE_MEMORY_WINDOW;
+  else process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '0';
   __resetIntelligenceFlagsCache();
 }
 
 describe('LiveTranscriptBrain', () => {
-  afterEach(() => enableDurable(false));
+  afterEach(() => {
+    delete process.env.NATIVELY_DURABLE_MEMORY_WINDOW;
+    __resetIntelligenceFlagsCache();
+  });
 
   test('getLiveWindow returns the recent (120s-evicted) window', () => {
     const s = new FakeSession(60);

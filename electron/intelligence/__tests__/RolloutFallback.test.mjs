@@ -16,6 +16,9 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // SWE-MEMORY — packaged TI same-session follow-ups (Hindsight stays OFF).
+  'durableMemoryWindow',
+  'conversationMemoryV2',
   // Safety isolation gates default ON. okf*/okfProfile* dev/test-default flags
   // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
   'docGroundedStrictIsolation',

@@ -141,6 +141,9 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // SWE-MEMORY — packaged TI same-session follow-ups (Hindsight stays OFF).
+  'durableMemoryWindow',
+  'conversationMemoryV2',
   // Safety isolation gates — ON everywhere by default. (The okf*/okfProfile* dev/
   // test-default flags resolve to isInternalDevTestContext(), which is FALSE when
   // NODE_ENV is unset as it is under this bare `node --test` harness, so they are
@@ -268,9 +271,9 @@ describe('Phase 14 — intelligence flag settings contract (key + meta surface)'
     assert.deepEqual(intelligenceFlagMeta('trace'),
       { setting: 'intelligenceTraceEnabled', env: 'NATIVELY_INTELLIGENCE_TRACE', default: false });
     assert.deepEqual(intelligenceFlagMeta('durableMemoryWindow'),
-      { setting: 'intelligenceDurableMemoryWindow', env: 'NATIVELY_DURABLE_MEMORY_WINDOW', default: false });
+      { setting: 'intelligenceDurableMemoryWindow', env: 'NATIVELY_DURABLE_MEMORY_WINDOW', default: true });
     assert.deepEqual(intelligenceFlagMeta('conversationMemoryV2'),
-      { setting: 'conversationMemoryV2Enabled', env: 'NATIVELY_CONVERSATION_MEMORY_V2', default: false });
+      { setting: 'conversationMemoryV2Enabled', env: 'NATIVELY_CONVERSATION_MEMORY_V2', default: true });
     assert.deepEqual(intelligenceFlagMeta('lectureIntelligenceV2'),
       { setting: 'lectureIntelligenceV2Enabled', env: 'NATIVELY_LECTURE_INTELLIGENCE_V2', default: false });
     assert.deepEqual(intelligenceFlagMeta('diagramIntelligence'),
