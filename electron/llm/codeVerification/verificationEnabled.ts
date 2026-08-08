@@ -1,42 +1,47 @@
 // electron/llm/codeVerification/verificationEnabled.ts
 //
-// Single kill-switch for verified code execution. Currently TEMPORARILY DISABLED
-// across the app: the orchestrator and ipcHandlers already early-return when
-// this returns false, so flipping the default to OFF shuts the whole pipeline
-// (extract → execute → judge → one-shot correction) cleanly without breaking
-// any other functionality. No redeploy needed.
+// Single kill-switch for verified code execution (swe-coach-build-order step 5).
+// DEFAULT ON for new installs / when unset so Coding answers under
+// technical-interview get sandboxed verify → judge → one-shot correction.
+// Scope is coding/dsa answer types only — Sales/Lecture never claim verification
+// (AnswerPlanner omits <verification_spec> for non-coding plans; callers also
+// gate on isCoding / isCodingChat).
 //
-// Re-enable at runtime (without changing code) by either:
-//   - env   NATIVELY_CODE_VERIFY = 'on' | 'true' | '1'   → enabled
-//   - settings  codeVerificationEnabled === true         → enabled
-// Reads defensively (never throws); any uncertainty resolves to OFF, EXCEPT an
-// explicit env/settings "on" which always wins.
+// Opt out at runtime (without changing code / redeploy) by either:
+//   - env   NATIVELY_CODE_VERIFY = 'off' | 'false' | '0' | 'disabled'  → disabled
+//   - settings  codeVerificationEnabled === false                     → disabled
+// Reads defensively (never throws). Any uncertainty resolves to the default ON,
+// EXCEPT an explicit env/settings "off" which always wins.
+//
+// Mirrors the kill-switch model in profileGroundingV2.ts.
 
-let cachedEnv: boolean | null = null;
+let cachedEnvOff: boolean | null = null;
 
-const envEnabled = (): boolean => {
-  if (cachedEnv !== null) return cachedEnv;
-  let on = false;
+const envDisabled = (): boolean => {
+  if (cachedEnvOff !== null) return cachedEnvOff;
+  let off = false;
   try {
     const v = (process.env.NATIVELY_CODE_VERIFY || '').trim().toLowerCase();
-    on = v === 'on' || v === 'true' || v === '1' || v === 'enabled';
-  } catch { on = false; }
-  cachedEnv = on;
-  return on;
+    off = v === 'off' || v === 'false' || v === '0' || v === 'disabled';
+  } catch { off = false; }
+  cachedEnvOff = off;
+  return off;
 };
 
 /**
- * True when verified code execution should run. Currently defaults to OFF
- * (temporary disable). An explicit env or settings "on" re-enables it at
- * runtime (no redeploy). Pure-ish + safe to call on the hot path (settings read
- * is a cheap cached SettingsManager get).
+ * True when verified code execution should run. DEFAULT ON; an explicit env or
+ * settings "off" disables it at runtime (no redeploy). Pure-ish + safe to call
+ * on the hot path (settings read is a cheap cached SettingsManager get).
  */
 export const isCodeVerificationEnabled = (): boolean => {
-  if (envEnabled()) return true;
+  if (envDisabled()) return false;
   try {
     const { SettingsManager } = require('../../services/SettingsManager');
     const v = SettingsManager.getInstance().get('codeVerificationEnabled');
-    if (v === true) return true; // explicit opt-in only; undefined → default OFF
-  } catch { /* settings unavailable → fall through to default OFF */ }
-  return false;
+    if (v === false) return false; // explicit opt-out only; undefined → default ON
+  } catch { /* settings unavailable → fall through to default ON */ }
+  return true;
 };
+
+/** Test-only: reset the cached env read (env can't change mid-process otherwise). */
+export const __resetCodeVerificationCache = (): void => { cachedEnvOff = null; };
