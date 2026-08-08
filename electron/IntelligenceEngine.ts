@@ -21,6 +21,7 @@ import {
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, checkAnswerRelevance,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, AnswerDiversityGuard,
     applySpeakableSdIfNeeded, mayCompressToSpeakable,
+    humanizeForAnswerType, compressTechnicalConcept, applySpeakabilityBudget,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
     deriveSdSessionAuthority,
@@ -4004,6 +4005,36 @@ export class IntelligenceEngine extends EventEmitter {
                         }
                         if (cleaned.trim().length >= 10 && cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
                     }
+                    // SWE-SPOKEN: always-on humanizer + Technical flatten + speakability
+                    // measure (parity with manual chat in ipcHandlers). Previously these
+                    // only ran inside answerDiversityGuard (default OFF), so Behavioral /
+                    // Technical spoken answers skipped last-mile polish on the live WTA path.
+                    // Gates internally on answer type — coding never reaches this block;
+                    // system_design_answer is a no-op for humanize (speakable-sd owns it).
+                    {
+                        const humanized = humanizeForAnswerType(answerPlan.answerType, finalWtaAnswer);
+                        if (humanized.changed && humanized.text.trim().length >= 10) {
+                            finalWtaAnswer = humanized.text;
+                        }
+                        if (answerPlan.answerType === 'technical_concept_answer') {
+                            const simpleRequested =
+                                answerPlan.answerStyle === 'beginner'
+                                || /\b(simple|simply|beginner|eli5|like i'?m (?:5|five)|layman)\b/i.test(question || '');
+                            const tech = compressTechnicalConcept(finalWtaAnswer, simpleRequested);
+                            if (tech.changed && tech.text.trim().length >= 20) {
+                                finalWtaAnswer = tech.text;
+                            }
+                        }
+                        // Measure-only (never trims) — keeps WTA telemetry/class aligned with
+                        // the manual path's speakability budget pass.
+                        applySpeakabilityBudget(
+                            finalWtaAnswer,
+                            answerPlan.answerType,
+                            answerPlan.answerStyle as any,
+                            question || '',
+                            isCoding,
+                        );
+                    }
                 } catch { /* cleanup never blocks the answer */ }
             }
             try {
@@ -4014,8 +4045,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // checks/records against a guard at all, so this path had zero repetition
                 // protection regardless of this flag; applyAnswerContract is the same facade's
                 // full version, matching what manual chat's always-on guard already does).
-                // All gate internally on answer type, so a coding/lecture/technical answer is
-                // a no-op. Flag-OFF → byte-for-byte unchanged.
+                // Diversity/repetition repair still flag-gated (defaults OFF). Spoken
+                // humanize/tech-flatten/speakability already ran always-on above.
                 if (isIntelligenceFlagEnabled('answerDiversityGuard')) {
                     const shaped = applyAnswerContract({
                         answer: finalWtaAnswer,

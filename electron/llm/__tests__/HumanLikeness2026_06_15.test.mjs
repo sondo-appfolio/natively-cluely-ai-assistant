@@ -22,6 +22,9 @@ describe('shouldHumanize — applies to spoken candidate/sales answers only', ()
   ];
   for (const t of humanize) test(`humanize: ${t}`, () => assert.equal(shouldHumanize(t), true));
 
+  // Prompt DIRECTIVE stays off for structured / Technical-concept types (final-pass
+  // humanize for technical_concept_answer is gated by shouldHumanizeOutput instead —
+  // see SweSpokenQuality.test.mjs / SWE-SPOKEN).
   const preserve = [
     'coding_question_answer', 'dsa_question_answer', 'system_design_answer',
     'debugging_question_answer', 'technical_concept_answer', 'lecture_answer',

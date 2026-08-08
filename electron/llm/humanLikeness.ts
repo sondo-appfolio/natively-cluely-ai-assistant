@@ -13,8 +13,9 @@
 //      it no longer strips mid-sentence **bold** — sparing key-term bold is kept as a
 //      deliberate on-screen scanning aid (bold is never spoken, so spoken quality is intact).
 //
-// Applied ONLY to spoken candidate/sales answers, never to code, lecture notes, diagrams,
-// search results, or technical explanations where structure/precision matters.
+// Applied to spoken candidate/sales answers AND spoken Technical concept answers
+// (SWE triad). Never to code, lecture notes, diagrams, search results, or
+// system_design_answer (speakable-sd owns that polish).
 //
 // Pure, deterministic, no LLM, no profile-specific strings.
 
@@ -35,10 +36,14 @@ const HUMANIZE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
  *  rewriter gates on: any spoken answer that is NOT one of these gets the final pass,
  *  because real sessions showed corporate filler arriving on profile_fact_answer,
  *  follow_up_answer, unknown_answer, general_meeting_answer, etc., not just the curated
- *  set above. */
+ *  set above.
+ *
+ *  SWE-SPOKEN: `technical_concept_answer` is intentionally NOT here — Technical-leg
+ *  answers are spoken aloud and need filler/em-dash cleanup. `system_design_answer`
+ *  stays denylisted (speakable-sd ADRs 0003/0005 own that path). */
 const STRUCTURE_PRESERVED_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'system_design_answer',
-  'debugging_question_answer', 'technical_concept_answer', 'lecture_answer',
+  'debugging_question_answer', 'lecture_answer',
   'project_link_answer', 'source_code_evidence_answer', 'ethical_usage_answer',
 ]);
 
@@ -50,7 +55,8 @@ export function shouldHumanize(answerType: AnswerType): boolean {
 
 /** Should the deterministic FINAL-PASS rewriter run? (broad denylist, last-mile cleanup
  *  of any spoken answer, since filler shows up on more types than the curated directive
- *  set). Code / lecture / technical / link / source / ethical answers are excluded. */
+ *  set). Code / lecture / system_design / link / source / ethical answers are excluded.
+ *  technical_concept_answer IS included (spoken Technical leg). */
 export function shouldHumanizeOutput(answerType: AnswerType): boolean {
   return !STRUCTURE_PRESERVED_TYPES.has(answerType);
 }
@@ -245,7 +251,7 @@ const SENT_RESTORE_RE = new RegExp(`${SENT_OPEN}(\\d+)${SENT_CLOSE}`, 'g');
 /**
  * Deterministically rewrite a SPOKEN answer toward plain human speech. Style-only,
  * fact-preserving, fence/code/math-safe, idempotent. Callers gate on shouldHumanizeOutput()
- * (and never call it for code-only / lecture / technical / search / json output).
+ * (and never call it for code-only / lecture / system_design / search / json output).
  *
  * Returns the original string unchanged when nothing matches.
  */
