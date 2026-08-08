@@ -15,8 +15,8 @@
 // reads SessionTracker.getDurableContext() (backed by fullTranscript, which survives
 // the 120s eviction) instead of getContext() (capped at 120s by evictOldEntries).
 // Whether the live follow-up memory should USE the durable window is gated by the
-// `durableMemoryWindow` flag (default OFF → current behavior preserved); this facade
-// just exposes both windows and a helper that picks per the flag.
+// `durableMemoryWindow` flag (default ON for SWE coach same-session recall); this
+// facade just exposes both windows and a helper that picks per the flag.
 //
 // Latency: every method here is pure in-memory array work (no LLM, no IO), so it
 // trivially meets the spec's <30ms transcript-lookup budget.
@@ -119,10 +119,9 @@ export class LiveTranscriptBrain {
 
   /**
    * The window the long-range follow-up MEMORY should be built from. When the
-   * `durableMemoryWindow` flag is ON, returns the durable (fullTranscript-backed)
-   * window so an entity from minute 1 is still present at minute 62. When OFF,
-   * returns the legacy getContext() window (current behavior, ~120s) — so enabling
-   * the flag is the ONLY thing that changes live recall.
+   * `durableMemoryWindow` flag is ON (default for packaged TI), returns the durable
+   * (fullTranscript-backed) window so an entity from minute 1 is still present at
+   * minute 62. When OFF, returns the legacy getContext() window (~120s).
    */
   getMemoryWindow(seconds: number = DEFAULT_DURABLE_WINDOW_SECONDS): TranscriptContextItem[] {
     return isDurableMemoryWindowEnabled()

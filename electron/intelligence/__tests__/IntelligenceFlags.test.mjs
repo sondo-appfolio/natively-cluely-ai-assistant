@@ -108,6 +108,10 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // SWE-MEMORY (packaged TI same-session follow-ups) — durable transcript window
+  // + Ask-bar conversation memory. Hindsight LTM stays default OFF.
+  'durableMemoryWindow',
+  'conversationMemoryV2',
   // Safety isolation gates default ON. okf*/okfProfile* dev/test-default flags
   // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
   'docGroundedStrictIsolation',
@@ -146,7 +150,7 @@ describe('intelligenceFlags', () => {
 
   test('every flag resolves to its documented default', () => {
     assert.equal(isIntelligenceTraceEnabled(), false);
-    assert.equal(isDurableMemoryWindowEnabled(), false);
+    assert.equal(isDurableMemoryWindowEnabled(), true);
     assert.equal(isIntelligenceOsEnabled(), false);
     for (const key of ALL_FLAG_KEYS) {
       assert.equal(isIntelligenceFlagEnabled(key), expectedDefault(key), `flag ${key} default mismatch`);
@@ -206,7 +210,7 @@ describe('intelligenceFlags', () => {
     __resetIntelligenceFlagsCache();
     const snap1 = intelligenceFlagSnapshot();
     assert.equal(snap1.trace, true);
-    assert.equal(snap1.durableMemoryWindow, false);
+    assert.equal(snap1.durableMemoryWindow, true);
   });
 
   test('reads defensively — never throws when settings unavailable', () => {
