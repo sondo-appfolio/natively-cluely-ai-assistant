@@ -149,6 +149,13 @@ const RU: Record<string, string> = {
 
     // ── Other settings tabs ──
     'Process Disguise': 'Маскировка процесса',
+    'Interview sessions always start undetectable. You cannot turn Detectable on during a session.':
+        'Сессии интервью всегда запускаются в режиме Undetectable. Во время сессии нельзя включить Detectable.',
+    'A system disguise is required while undetectable. Default is Terminal.':
+        'Пока включён Undetectable, требуется маскировка под системное приложение. По умолчанию — Terminal.',
+    'Select a disguise to be automatically applied when Undetectable mode is on.':
+        'Выберите маскировку, которая применяется в режиме Undetectable.',
+
     'Keyboard shortcuts': 'Горячие клавиши',
     'Visible Calendars': 'Видимые календари',
     'No calendars': 'Нет календарей',

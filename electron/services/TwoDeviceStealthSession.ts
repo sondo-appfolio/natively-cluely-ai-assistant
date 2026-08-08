@@ -2,7 +2,12 @@
  * Two-device stealth session — desktop half of InterviewMan-like phone control.
  * Phone Mirror keeps serving answers; this module hides/restores the overlay and
  * engages undetectable without tearing down mic/LLM/Phone Mirror/stealth globals.
+ *
+ * stealth-sticky-after-session (ADR 0017): exit/end may restore overlay visibility
+ * but must never restore detectability.
  */
+
+import { undetectableAfterTwoDeviceExit } from './sessionStealthPolicy';
 
 export type TwoDeviceStealthOp = 'enter' | 'exit' | 'end';
 
@@ -36,7 +41,6 @@ export class TwoDeviceStealthSession {
   }
 
   private active = false;
-  private priorUndetectable: boolean | null = null;
   private priorOverlayVisible: boolean | null = null;
 
   isActive(): boolean {
@@ -52,7 +56,6 @@ export class TwoDeviceStealthSession {
         active: true,
       };
     }
-    this.priorUndetectable = host.getUndetectable();
     this.priorOverlayVisible = host.isOverlayVisible();
     host.setUndetectable(true);
     host.hideOverlay();
@@ -74,12 +77,10 @@ export class TwoDeviceStealthSession {
         active: false,
       };
     }
-    const restoreUndetectable = this.priorUndetectable === true;
     const restoreOverlay = this.priorOverlayVisible !== false;
-    host.setUndetectable(restoreUndetectable);
+    host.setUndetectable(undetectableAfterTwoDeviceExit());
     if (restoreOverlay) host.showOverlay();
     this.active = false;
-    this.priorUndetectable = null;
     this.priorOverlayVisible = null;
     return {
       ok: true,

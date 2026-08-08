@@ -1289,6 +1289,7 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { resolveDisguiseForStealth } from './services/sessionStealthPolicy'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 
@@ -1468,6 +1469,11 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
+    // force-disguise-when-stealth: coerce persisted none→terminal before first paint.
+    if (this.isUndetectable) {
+      this.disguiseMode = resolveDisguiseForStealth(this.disguiseMode);
+      settingsManager.set('disguiseMode', this.disguiseMode);
+    }
     this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
@@ -5894,6 +5900,11 @@ export class AppState {
     // the reset bounds.)
     this.windowHelper.resetOverlayPosition();
 
+    // conversation-start-stealth + force-disguise-when-stealth (ADR 0017/0018):
+    // Engage undetectable BEFORE showing the overlay so content protection is
+    // on before the first paint of the meeting surface.
+    this.setUndetectable(true);
+
     // ─── WINDOW SWAP BEFORE STATE BROADCAST ───────────────────────────────
     // Switch to the overlay BEFORE flipping `isMeetingActive` to true. If we
     // broadcast meeting-state-changed:{isActive:true} while the launcher is
@@ -5906,6 +5917,7 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.broadcastMeetingState()
+
     // Stamp a stable meeting id at start so SD Requirements checkpoints can
     // key the working copy before stopMeeting creates the meetings row.
     const meetingMeta = metadata && typeof metadata === 'object' ? { ...metadata } : {};
@@ -7208,6 +7220,11 @@ export class AppState {
     // The expensive macOS dock/focus side-effects below still only run on a real
     // change, so we don't thrash the dock on a no-op.
     if (!decision.changed) {
+      // Still coerce disguise when already undetectable (e.g. startMeeting re-assert).
+      if (this.isUndetectable) {
+        const forced = resolveDisguiseForStealth(this.disguiseMode);
+        if (forced !== this.disguiseMode) this.setDisguise(forced);
+      }
       this._broadcastToAllWindows('undetectable-changed', this.isUndetectable);
       return;
     }
@@ -7215,6 +7232,13 @@ export class AppState {
     console.log(`[Stealth] setUndetectable(${state}) called`);
 
     this.isUndetectable = state
+    // force-disguise-when-stealth: never remain on disguiseMode `none` while undetectable.
+    if (state) {
+      const forced = resolveDisguiseForStealth(this.disguiseMode);
+      if (forced !== this.disguiseMode) {
+        this.setDisguise(forced);
+      }
+    }
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
@@ -7526,6 +7550,10 @@ export class AppState {
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     mode = normalizeDisguiseMode(mode);
+    // force-disguise-when-stealth: reject `none` while undetectable (coerce to terminal).
+    if (this.isUndetectable && mode === 'none') {
+      mode = resolveDisguiseForStealth('none');
+    }
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
 
@@ -7554,6 +7582,10 @@ export class AppState {
   }
 
   public applyInitialDisguise(): void {
+    if (this.isUndetectable) {
+      this.disguiseMode = resolveDisguiseForStealth(this.disguiseMode);
+      SettingsManager.getInstance().set('disguiseMode', this.disguiseMode);
+    }
     this._applyDisguise(this.disguiseMode);
   }
 

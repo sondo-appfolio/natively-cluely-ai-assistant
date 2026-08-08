@@ -6,6 +6,7 @@
 - [Speakable system design](./docs/speakable-sd/CONTEXT.md) — SD interview answers as read-aloud Delivery Framework talk (no DSA code dumps); includes **SD route** terms for `system_design_answer` classification
 - [Natively iOS Stealth Mode client](./docs/standalone-ios/CONTEXT.md) — InterviewMan-like phone client paired with desktop via Phone Mirror (not standalone listen→LLM)
 - [InterviewMan listen parity](./docs/interviewman-listen/CONTEXT.md) — desktop always-on live STT, red-square live-STT transport, bottom Ask bar (Think / type / ↑), triangle end-meeting, Settings live-STT sandbox; phone STT source + control via Phone Mirror (see `.scratch/interviewman-listen/`)
+- [Always-stealth SWE interview coach](./docs/always-stealth-swe-coach/CONTEXT.md) — desktop always-undetectable SWE coach; one technical-interview session; triad answer-type routing; non-SWE modes product-retired
 
 ## Relationships
 
@@ -19,3 +20,7 @@
 - **InterviewMan listen ↔ iOS Stealth Mode client** — phone may be a **phone-stt-source** and **phone-control-surface** on Phone Mirror (ADR 0015); desktop remains LLM/planner host (ADR 0011 amended, not replaced). Desktop owns **listen-transport-arming** projection and answer generation.
 - **InterviewMan listen ↔ Speakable SD** — orthogonal; “session” in sticky SD ≠ meeting listen transport.
 - **InterviewMan listen ↔ Commercial strip** — orthogonal.
+- **Always-stealth SWE coach ↔ InterviewMan listen** — listen/control map unchanged; always-stealth engages on the same `startMeeting` / live session that arms listen-transport.
+- **Always-stealth SWE coach ↔ Speakable SD** — Technical leg includes `system_design_answer`; speakable SD ADRs still apply under **swe-interview-session**.
+- **Always-stealth SWE coach ↔ iOS Stealth Mode client** — desktop owns always-stealth; iOS keeps transparent-coach (ADR 0007); two-device exit must not restore desktop detectability (**stealth-sticky-after-session**).
+- **Always-stealth SWE coach ↔ Commercial strip** — orthogonal.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -284,13 +284,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     if (!window.electronAPI) {
         return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
     }
-
-    const toggleDetectable = () => {
-        const newState = !isDetectable;
-        setIsDetectable(newState);
-        window.electronAPI?.setUndetectable(!newState); // Note: setUndetectable takes the *undetectable* state, which is inverse of *detectable*
-        analytics.trackModeSelected(newState ? 'launcher' : 'undetectable'); // If visible (detectable), mode is normal/launcher. If not detectable, mode is undetectable.
-    };
 
     // Group meetings
     const groupedMeetings = meetings.reduce((acc, meeting) => {
@@ -762,42 +755,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
-
-                                            {/* Detectable Toggle Pill */}
-                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] shrink-0 transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
-                                                {isDetectable ? (
-                                                    <Ghost
-                                                        size={14}
-                                                        strokeWidth={2}
-                                                        className="text-text-secondary transition-colors shrink-0"
-                                                    />
-                                                ) : (
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        className="transition-colors shrink-0"
-                                                    >
-                                                        <path
-                                                            d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
-                                                            fill={isLight ? '#48484A' : 'white'}
-                                                        />
-                                                        <circle cx="9" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                        <circle cx="15" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                    </svg>
-                                                )}
-                                                <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
-                                                    {isDetectable ? t("Detectable") : t("Undetectable")}
-                                                </span>
-                                                <div
-                                                    className={`w-8 h-4 rounded-full p-0.5 flex items-center shrink-0 transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                    onClick={toggleDetectable}
-                                                >
-                                                    <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${!isDetectable ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                </div>
-                                             </div>
 
                                              {/* What's New Pill */}
                                              {launchCount < 10 && (
