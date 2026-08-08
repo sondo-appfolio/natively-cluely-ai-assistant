@@ -4,6 +4,7 @@ import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION 
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
+import { isSweInterviewActiveMode } from './sweTriad';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
 import {
@@ -2393,6 +2394,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
+  // ADR 0019: suppress product-retired sales/lecture floors on the SWE session path.
+  const sweInterviewSession = isSweInterviewActiveMode(input.activeMode);
 
   let answerType: AnswerType = 'general_meeting_answer';
 
@@ -2690,9 +2693,25 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // selling. NOT profile_fact (no résumé dump): the layer table forbids
     // resume/jd/negotiation; founder framing comes from persona/custom context.
     answerType = 'product_candidate_mix_answer';
-  } else if (includesAny(text, SALES_PATTERNS)) {
+  } else if (
+    // swe-triad / ADR 0019: under swe-interview-session (and hard-out leftovers
+    // remapped to TI), never floor to product-retired sales_answer / lecture_answer.
+    // Skip these branches so later triad classifiers (concept/SD/coding/behavioral)
+    // or the NEUTRAL fallthrough can claim the turn. Patterns stay for non-SWE
+    // modes that still exist in code for recoverability.
+    !sweInterviewSession && includesAny(text, SALES_PATTERNS)
+  ) {
     answerType = 'sales_answer';
-  } else if (includesAny(text, LECTURE_PATTERNS)) {
+  } else if (
+    // Exam/slide phrasing that wraps a real CS subject ("6-mark CAP theorem")
+    // → Technical leg instead of retired lecture_answer.
+    sweInterviewSession
+    && includesAny(text, LECTURE_PATTERNS)
+    && isLikelyTechnicalConcept(textNoTechStack)
+    && !hasWriteCodeVerb
+  ) {
+    answerType = 'technical_concept_answer';
+  } else if (!sweInterviewSession && includesAny(text, LECTURE_PATTERNS)) {
     answerType = 'lecture_answer';
   } else if (asksAboutNatively && includesAny(text, PRODUCT_ABOUT_PATTERNS)) {
     // A question that NAMES Natively and is about its build/architecture/stack is a
