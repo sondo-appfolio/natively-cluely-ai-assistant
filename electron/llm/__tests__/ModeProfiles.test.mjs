@@ -1,13 +1,13 @@
 // electron/llm/__tests__/ModeProfiles.test.mjs
 //
 // PI v3 (W1): the active mode is a routing PRIOR on the classification
-// FALLTHROUGH only. Invariants under test:
-//   1. Ambiguous turns route to the mode's fallback type (sales → sales_answer,
-//      lecture → lecture_answer, team-meet/recruiting → general_meeting_answer).
+// FALLTHROUGH only. Invariants under test (updated ADR 0019):
+//   1. Hard-out templates (sales/lecture/seminar/recruiting) + looking-for-work
+//      collapse priors to technical-interview (NEUTRAL) — no sales_answer /
+//      lecture_answer floors on the live product path.
 //   2. Explicit signals ALWAYS win — a coding/identity/negotiation/profile ask
 //      in ANY mode routes exactly as it does with no mode (leak invariant).
-//   3. The rewritten fallback type carries its own layer rules (sales_answer
-//      forbids resume/jd/negotiation) so no profile can leak into a sales turn.
+//   3. team-meet leftovers keep conversation-scoped general_meeting floors.
 //   4. No-mode / general mode behavior is byte-for-byte unchanged.
 //
 // Runs against the COMPILED dist-electron output (same pattern as the other
@@ -27,34 +27,27 @@ const mode = (templateType, name = templateType) => ({
 // the pure fallthrough case. (Vague discourse, no profile attribute words.)
 const AMBIGUOUS_LIVE = 'so, hmm, what do you think about all of this then?';
 
-test('W1-1: ambiguous live turn in SALES mode routes to sales_answer', () => {
+test('W1-1: ambiguous live turn in SALES mode no longer floors to sales_answer (ADR 0019)', () => {
     const plan = planAnswer({
         question: AMBIGUOUS_LIVE,
         source: 'what_to_answer',
         speakerPerspective: 'interviewer',
         activeMode: mode('sales'),
     });
-    assert.equal(plan.answerType, 'sales_answer');
-    // The rewritten type carries its own leak rules: resume/jd/negotiation forbidden.
-    assert.ok(plan.forbiddenContextLayers.includes('resume'));
-    assert.ok(plan.forbiddenContextLayers.includes('jd'));
-    assert.ok(plan.forbiddenContextLayers.includes('negotiation'));
-    assert.equal(plan.profileContextPolicy, 'forbidden');
+    assert.notEqual(plan.answerType, 'sales_answer');
 });
 
-test('W1-2: ambiguous live turn in LECTURE mode routes to lecture_answer (reference files in, resume out)', () => {
+test('W1-2: ambiguous live turn in LECTURE mode no longer floors to lecture_answer (ADR 0019)', () => {
     const plan = planAnswer({
         question: AMBIGUOUS_LIVE,
         source: 'what_to_answer',
         speakerPerspective: 'interviewer',
         activeMode: mode('lecture'),
     });
-    assert.equal(plan.answerType, 'lecture_answer');
-    assert.ok(plan.requiredContextLayers.includes('reference_files'));
-    assert.ok(plan.forbiddenContextLayers.includes('resume'));
+    assert.notEqual(plan.answerType, 'lecture_answer');
 });
 
-test('W1-3: ambiguous live turn in TEAM-MEET / RECRUITING stays conversation-scoped', () => {
+test('W1-3: ambiguous live turn in TEAM-MEET stays conversation-scoped; recruiting hard-out is NEUTRAL', () => {
     for (const t of ['team-meet', 'recruiting']) {
         const plan = planAnswer({
             question: AMBIGUOUS_LIVE,
@@ -139,14 +132,18 @@ test('W1-7: an EXPLICIT meeting-recap match is not rewritten by the sales prior 
 // ── applyModeFallback unit contract ─────────────────────────────────────────
 test('W1-8: applyModeFallback only rewrites floor types and only when fellThrough', () => {
     const sales = mode('sales');
-    assert.equal(applyModeFallback('unknown_answer', true, 'manual_input', sales), 'sales_answer');
-    assert.equal(applyModeFallback('general_meeting_answer', true, 'what_to_answer', sales), 'sales_answer');
+    // ADR 0019 product-retire: sales/lecture priors collapse to technical-interview
+    // (NEUTRAL) — hard-out templates must not rewrite fallthrough to sales_answer.
+    assert.equal(applyModeFallback('unknown_answer', true, 'manual_input', sales), 'unknown_answer');
+    assert.equal(applyModeFallback('general_meeting_answer', true, 'what_to_answer', sales), 'general_meeting_answer');
     // Not a fallthrough → untouched.
     assert.equal(applyModeFallback('general_meeting_answer', false, 'what_to_answer', sales), 'general_meeting_answer');
     // Non-floor type → untouched even when fellThrough is (incorrectly) true.
     assert.equal(applyModeFallback('identity_answer', true, 'what_to_answer', sales), 'identity_answer');
     // No mode → untouched.
     assert.equal(applyModeFallback('unknown_answer', true, 'manual_input', null), 'unknown_answer');
+    // TI remains NEUTRAL; lecture hard-out also NEUTRAL via prior remap.
+    assert.equal(applyModeFallback('unknown_answer', true, 'manual_input', mode('lecture')), 'unknown_answer');
 });
 
 test('W1-9: candidate-directed unmatched question still routes to a profile type in sales mode', () => {

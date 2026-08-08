@@ -19,6 +19,10 @@ import {
     strictDocumentGroundedFromContract,
     buildUserSelectedSourceContract,
 } from './modeSourceContract';
+import {
+    SWE_INTERVIEW_TEMPLATE,
+    shouldMigrateActiveModeToSwe,
+} from './sweModeProductPolicy';
 
 /**
  * Drop sensitive (salary/pricing/strategy) chunks from a raw customContext blob
@@ -406,11 +410,19 @@ export class ModesManager {
         return modes;
     }
 
-    // Seed the un-deletable General mode once at app init. Idempotent.
+    // Seed the SWE interview session mode once at app init (ADR 0019). Idempotent.
+    // Migrates active hard-out / looking-for-work modes onto technical-interview.
     public ensureSeeded(): void {
-        const modes = DatabaseManager.getInstance().getModes().map(rowToMode);
-        if (!modes.some(m => m.templateType === 'general')) {
-            this.createMode({ name: 'General', templateType: 'general' });
+        const db = DatabaseManager.getInstance();
+        let modes = db.getModes().map(rowToMode);
+        if (!modes.some(m => m.templateType === SWE_INTERVIEW_TEMPLATE)) {
+            this.createMode({ name: 'Technical Interview', templateType: SWE_INTERVIEW_TEMPLATE });
+            modes = db.getModes().map(rowToMode);
+        }
+        const ti = modes.find(m => m.templateType === SWE_INTERVIEW_TEMPLATE);
+        const active = modes.find(m => m.isActive) ?? null;
+        if (ti && (!active || shouldMigrateActiveModeToSwe(active.templateType))) {
+            this.setActiveMode(ti.id);
         }
     }
 

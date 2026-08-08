@@ -16,20 +16,29 @@ interface ModesSettingsProps {
   onClose?: () => void;
 }
 
+/** Product create chrome — SWE interview session only (ADR 0019). */
 const TEMPLATE_TYPES: Array<{ value: string; label: string }> = [
-  { value: 'general', label: 'General' },
-  { value: 'looking-for-work', label: 'Looking for work' },
-  { value: 'sales', label: 'Sales' },
-  { value: 'recruiting', label: 'Recruiting' },
-  { value: 'team-meet', label: 'Team meeting' },
-  { value: 'lecture', label: 'Lecture' },
   { value: 'technical-interview', label: 'Technical interview' },
 ];
+
+/** Labels for legacy rows still listed after product-retire (not creatable). */
+const LEGACY_TEMPLATE_LABELS: Record<string, string> = {
+  general: 'General',
+  'looking-for-work': 'Looking for work',
+  sales: 'Sales',
+  recruiting: 'Recruiting',
+  'team-meet': 'Team meeting',
+  lecture: 'Lecture',
+  seminar: 'Seminar',
+  'technical-interview': 'Technical interview',
+};
 
 const CUSTOM_CONTEXT_MAX = 8000;
 
 const templateLabel = (value: string): string =>
-  TEMPLATE_TYPES.find((tpl) => tpl.value === value)?.label ?? value;
+  TEMPLATE_TYPES.find((tpl) => tpl.value === value)?.label
+  ?? LEGACY_TEMPLATE_LABELS[value]
+  ?? value;
 
 export const ModesSettings: React.FC<ModesSettingsProps> = ({ onClose }) => {
   const t = useT();
@@ -37,7 +46,7 @@ export const ModesSettings: React.FC<ModesSettingsProps> = ({ onClose }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newTemplate, setNewTemplate] = useState('general');
+  const [newTemplate, setNewTemplate] = useState('technical-interview');
   const [draftName, setDraftName] = useState('');
   const [draftContext, setDraftContext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -74,7 +83,7 @@ export const ModesSettings: React.FC<ModesSettingsProps> = ({ onClose }) => {
     try {
       const res = await window.electronAPI.modesCreate?.({ name, templateType: newTemplate });
       if (res && res.success === false) { setError(res.error ?? t('Could not create mode.')); return; }
-      setNewName(''); setNewTemplate('general'); setCreating(false);
+      setNewName(''); setNewTemplate('technical-interview'); setCreating(false);
       await refresh();
       if (res?.mode?.id) setSelectedId(res.mode.id);
     } catch (e: any) {
@@ -131,7 +140,7 @@ export const ModesSettings: React.FC<ModesSettingsProps> = ({ onClose }) => {
         <div className="min-w-0">
           <h3 className="text-lg font-bold text-text-primary">{t('Modes')}</h3>
           <p className="mt-0.5 text-xs text-text-secondary">
-            {t('Tailor how Natively answers for sales calls, interviews, lectures, and more. All modes are available.')}
+            {t('Software Engineer interview session — Coding, Technical, and Behavioral answers route automatically. Create modes from the Technical interview template.')}
           </p>
         </div>
         {onClose ? (

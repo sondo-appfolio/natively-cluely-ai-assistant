@@ -785,7 +785,7 @@ const SetupGuide = () => {
         },
         {
             title: 'Set Up Audio',
-            desc: 'Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.',
+            desc: 'Open Settings → Audio and select a speech-to-text provider, or paste a Deepgram, Groq, or Google key.',
         },
         {
             title: 'Connect an AI Model',
@@ -882,7 +882,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 {onNavigate && (
                     <div
-                        onClick={() => onNavigate('natively-api')}
+                        onClick={() => onNavigate('audio')}
                         className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
@@ -890,14 +890,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <Zap className="w-5 h-5 text-text-primary group-hover:text-white transition-colors" fill="currentColor" />
                             </div>
                             <div className="flex-1">
-                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Want to skip the manual setup?</h4>
+                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Need speech-to-text?</h4>
                                 <p className="text-[13px] text-text-secondary">
-                                    Use the <span className="font-semibold text-text-primary">Natively API</span> for an out-of-the-box experience. One-click zero-configuration usage.
+                                    Open <span className="font-semibold text-text-primary">Settings → Audio</span> and select a provider, then paste your API key.
                                 </p>
                             </div>
                         </div>
                         <div className="hidden sm:flex self-center ml-4 px-3 py-1.5 rounded-lg bg-text-primary text-bg-main text-[11px] font-bold items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity whitespace-nowrap shrink-0">
-                            Enable Now <ArrowRight size={12} />
+                            Open Audio <ArrowRight size={12} />
                         </div>
                     </div>
                 )}
@@ -1596,16 +1596,13 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+                        <p className="text-[13px]">Natively runs as a Software Engineer interview session (Technical Interview template). Each mode still has a system prompt, personal context, reference files, and note sections — but new modes are created from Technical Interview, and each turn routes across Coding, Technical, and Behavioral answers automatically.</p>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
-                                { name: 'Interview', desc: 'STAR-format answers, behavioral stories, step-by-step coding hints.' },
-                                { name: 'Sales', desc: 'Objection handling, discovery questions, product pitch frameworks.' },
-                                { name: 'Recruiting', desc: 'Candidate assessment, JD cross-referencing, structured evaluation.' },
-                                { name: 'Team Meet', desc: 'Action items, announcements, blockers, decisions — auto-extracted.' },
-                                { name: 'Lecture', desc: 'Concept breakdowns, intuition-first explanations, formula notes.' },
-                                { name: 'Technical', desc: 'DSA / system design reasoning, edge cases, complexity analysis.' },
+                                { name: 'Coding', desc: 'DSA / implementation answers, edge cases, and coding-contract debug help.' },
+                                { name: 'Technical', desc: 'Concepts and speakable system design — tradeoffs you can say aloud.' },
+                                { name: 'Behavioral', desc: 'Spoken experience stories grounded in your profile evidence.' },
                             ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
                                 <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
@@ -1631,7 +1628,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <li>Select any mode in the left sidebar</li>
                                         <li>Click <strong>Set active</strong> to apply it</li>
                                         <li>The toolbar icon shows the active mode name live</li>
-                                        <li>Click <strong>Deactivate</strong> to return to General</li>
+                                        <li>Click <strong>Deactivate</strong> only if you need no active mode (default seed is Technical Interview)</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1657,10 +1654,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Star size={14} /> All Modes Included
+                                <Star size={14} /> SWE Interview Focus
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Every mode is available to all users — no license required. Create unlimited custom modes and switch between all seven templates freely.
+                                Create unlimited custom modes from the Technical Interview template. Sales, Lecture, Seminar, and Recruiting templates are retired from product chrome.
                             </p>
                         </div>
                     </div>
