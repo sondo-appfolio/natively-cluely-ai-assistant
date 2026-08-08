@@ -8,14 +8,16 @@
 //     benchmarks / tests / early boot),
 //   • expose a __reset*Cache() hook so a test can change env mid-process.
 //
-// ROLLOUT POSTURE (release 2026-06-12): every flag here is ADDITIVE and OFF by
+// ROLLOUT POSTURE (release 2026-06-12): most flags here are ADDITIVE and OFF by
 // default. The Intelligence OS facades (ProfileTreeService, LiveTranscriptBrain,
 // ContextRouter) are a canonical READ/DECISION layer that sits BESIDE the
 // existing, benchmark-green answer paths — turning a flag on never changes an
-// answer unless a caller is also wired to consult the facade. The only flag that
-// can change LIVE behavior is `durableMemoryWindow` (it points the long-range
-// follow-up memory at the transcript store that actually survives eviction), and
-// it is default-OFF so the current path is byte-for-byte unchanged until opted in.
+// answer unless a caller is also wired to consult the facade.
+//
+// SWE coach same-session memory (2026-08, swe-coach-build-order step 6):
+// `durableMemoryWindow` + `conversationMemoryV2` default ON so packaged
+// technical-interview follow-ups recall the durable live transcript / Ask-bar
+// conversation memory. Hindsight LTM flags stay default OFF (deferred).
 //
 // Decision precedence per flag (highest first):
 //   1. env override on/off   → that value
@@ -35,7 +37,8 @@ export type IntelligenceFlagKey =
   | 'trace'
   // Point the live long-range follow-up memory at the DURABLE transcript store
   // (fullTranscript) instead of the 120s-evicted contextItems window. Fixes the
-  // verified "2h window silently capped to 120s" bug. Default OFF → current path.
+  // verified "2h window silently capped to 120s" bug. Default ON for SWE coach
+  // same-session recall (LiveTranscriptBrain.getMemoryWindow + attribution).
   | 'durableMemoryWindow'
   // ── Full Intelligence OS rollout set (Phase 3). Every entry default OFF so the
   //    current behavior is preserved until a caller is wired AND the flag is on.
@@ -399,10 +402,14 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
     setting: 'intelligenceTraceEnabled',
     default: false,
   },
+  // Default ON (SWE-MEMORY / packaged TI): long-range follow-ups must read
+  // fullTranscript. Env/settings can still force OFF. IntelligenceEngine's
+  // live SessionMemory path already reads getDurableContext unconditionally;
+  // this flag aligns LiveTranscriptBrain.getMemoryWindow + attribution.
   durableMemoryWindow: {
     env: 'NATIVELY_DURABLE_MEMORY_WINDOW',
     setting: 'intelligenceDurableMemoryWindow',
-    default: false,
+    default: true,
   },
   intelligenceOsEnabled: { env: 'NATIVELY_INTELLIGENCE_OS', setting: 'intelligenceOsEnabled', default: false },
   profileTreeV2: { env: 'NATIVELY_PROFILE_TREE_V2', setting: 'profileTreeV2Enabled', default: false },
@@ -430,7 +437,10 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   speakerDiarizationV1: { env: 'NATIVELY_SPEAKER_DIARIZATION_V1', setting: 'speakerDiarizationV1Enabled', default: false },
   globalSearchV2: { env: 'NATIVELY_GLOBAL_SEARCH_V2', setting: 'globalSearchV2Enabled', default: false },
   inMeetingSearchV2: { env: 'NATIVELY_IN_MEETING_SEARCH_V2', setting: 'inMeetingSearchV2Enabled', default: false },
-  conversationMemoryV2: { env: 'NATIVELY_CONVERSATION_MEMORY_V2', setting: 'conversationMemoryV2Enabled', default: false },
+  // Default ON (SWE-MEMORY / packaged TI): Ask-bar / manual same-session
+  // follow-ups ("make that shorter", coding continuations) need conversation
+  // memory. Hindsight LTM remains separately gated and default OFF.
+  conversationMemoryV2: { env: 'NATIVELY_CONVERSATION_MEMORY_V2', setting: 'conversationMemoryV2Enabled', default: true },
   lectureIntelligenceV2: { env: 'NATIVELY_LECTURE_INTELLIGENCE_V2', setting: 'lectureIntelligenceV2Enabled', default: false },
   diagramIntelligence: { env: 'NATIVELY_DIAGRAM_INTELLIGENCE', setting: 'diagramIntelligenceEnabled', default: false },
   hindsightMemory: { env: 'NATIVELY_HINDSIGHT_MEMORY', setting: 'hindsightMemoryEnabled', default: false },
@@ -635,7 +645,7 @@ export const isJitFinalAnswerEnforced = (): boolean =>
 /**
  * True when the live long-range follow-up memory should read from the durable
  * transcript store (fullTranscript) rather than the 120s-evicted contextItems.
- * Default OFF — the current behavior is preserved until explicitly opted in.
+ * Default ON for SWE coach same-session recall (env/settings can force OFF).
  */
 export const isDurableMemoryWindowEnabled = (): boolean =>
   isIntelligenceFlagEnabled('durableMemoryWindow');

@@ -481,6 +481,8 @@ docs/*
 !docs/speakable-sd/**
 !docs/standalone-ios/
 !docs/standalone-ios/**
+!docs/always-stealth-swe-coach/
+!docs/always-stealth-swe-coach/**
 benchmark-results/
 
 

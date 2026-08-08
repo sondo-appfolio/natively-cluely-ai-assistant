@@ -5,7 +5,7 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
     Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
 } from 'lucide-react';
@@ -14,12 +14,10 @@ import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
-import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
-import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -394,7 +392,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
    direction rather than guessing. Keep in sync with the <nav> below. */
 const SETTINGS_NAV_ORDER = [
     'general',
-    'natively-api',
     'ai-providers',
     'skills',
     'calendar',
@@ -423,12 +420,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
 
-    // Sync active tab when modal opens (legacy plans/natively-pro aliases → BYOK API keys)
+    // Sync active tab when modal opens. Legacy natively-api / plans / natively-pro
+    // deep-links retarget to Audio (BYOK STT) — the Natively API tab is removed.
     useEffect(() => {
         if (isOpen && initialTab) {
             setActiveTab(
-                initialTab === 'natively-pro' || initialTab === 'plans'
-                    ? 'natively-api'
+                initialTab === 'natively-pro' || initialTab === 'plans' || initialTab === 'natively-api'
+                    ? 'audio'
                     : initialTab,
             );
 
@@ -452,9 +450,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             </span>
         ) : null
     );
-    const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
-    const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
+    const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('terminal');
     const [openOnLogin, setOpenOnLogin] = useState(false);
     const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
@@ -484,9 +481,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
             // Fetch true initial state from main process
-            window.electronAPI?.getUndetectable?.().then(setIsUndetectable).catch(() => { });
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
-            window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
+            window.electronAPI?.getDisguise?.().then((mode) => {
+                if (mode === 'none' || !mode) {
+                    setDisguiseMode('terminal');
+                    window.electronAPI?.setDisguise?.('terminal');
+                } else {
+                    setDisguiseMode(mode);
+                }
+            }).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
@@ -507,9 +510,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     /* ---------------------------------------------------------------- */
     const reduceMotion = useReducedMotion() ?? false;
 
-    /* 'natively-api' renders the same panel content. Keying on activeTab would
-       remount and drop internal state during those switches. */
-    const panelKey = activeTab === 'natively-api' ? 'natively-api' : activeTab;
+    const panelKey = activeTab;
 
     /* Read the previous key during render, write it in an effect — mutating a
        ref while rendering double-fires under StrictMode. */
@@ -564,15 +565,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
         />
     );
-
-    useEffect(() => {
-        if (window.electronAPI?.onUndetectableChanged) {
-            const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
-                setIsUndetectable(newState);
-            });
-            return () => unsubscribe();
-        }
-    }, []);
 
     useEffect(() => {
         if (window.electronAPI?.onMeetingRetentionChanged) {
@@ -1408,10 +1400,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            // Load detectable status
-            if (window.electronAPI?.getUndetectable) {
-                window.electronAPI.getUndetectable().then(setIsUndetectable);
-            }
             if (window.electronAPI?.getOpenAtLogin) {
                 window.electronAPI.getOpenAtLogin().then(setOpenOnLogin);
             }
@@ -1700,13 +1688,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('natively-api')}
-                                        className={navItemClass(activeTab === 'natively-api')}
-                                    >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
-                                        <span>Natively API</span>
-                                    </button>
-                                    <button
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={navItemClass(activeTab === 'ai-providers')}
                                     >
@@ -1833,47 +1814,32 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
-                                                {/* Detectable / Undetectable */}
+                                                {/* Always-stealth status (no Detectable switch — ADR 0017) */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            {isUndetectable ? (
-                                                                <svg
-                                                                    width="20"
-                                                                    height="20"
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="none"
-                                                                    stroke="currentColor"
-                                                                    strokeWidth="2"
-                                                                    strokeLinecap="round"
-                                                                    strokeLinejoin="round"
-                                                                >
-                                                                    <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
-                                                                    <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                                    <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                                </svg>
-                                                            ) : (
-                                                                <Ghost size={20} />
-                                                            )}
+                                                            <svg
+                                                                width="20"
+                                                                height="20"
+                                                                viewBox="0 0 24 24"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="2"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                            >
+                                                                <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
+                                                                <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                                <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                            </svg>
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Undetectable')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                                {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary hover:underline">{t('Supported apps here')}</button>
+                                                                {t('Interview sessions always start undetectable. You cannot turn Detectable on during a session.')}{' '}
+                                                                <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary hover:underline">{t('Supported apps here')}</button>
                                                             </p>
                                                         </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !isUndetectable;
-                                                            setIsUndetectable(newState);
-                                                            window.electronAPI?.setUndetectable(newState);
-                                                            // Analytics: Undetectable Mode Toggle
-                                                            analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
@@ -2413,39 +2379,30 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <p className="text-xs text-text-secondary">
                                                 {t('Disguise Natively as another application to prevent detection during screen sharing.')}
                                                 <span className="block mt-1 text-text-tertiary">
-                                                    {t('Select a disguise to be automatically applied when Undetectable mode is on.')}
+                                                    {t('A system disguise is required while undetectable. Default is Terminal.')}
                                                 </span>
                                             </p>
                                         </div>
 
-                                        <div className={`grid grid-cols-2 gap-3 ${isUndetectable ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            {isUndetectable && (
-                                                <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
-                                                    ⚠️ {t('Disable Undetectable mode first to change disguise.')}
-                                                </p>
-                                            )}
+                                        <div className="grid grid-cols-2 gap-3">
                                             {[
-                                                { id: 'none', label: 'None (Default)', icon: <Layout size={14} /> },
                                                 { id: 'terminal', label: 'Terminal', icon: <Terminal size={14} /> },
                                                 { id: 'settings', label: 'System Settings', icon: <Settings size={14} /> },
                                                 { id: 'activity', label: 'Activity Monitor', icon: <Activity size={14} /> }
                                             ].map((option) => (
                                                 <button
                                                     key={option.id}
-                                                    disabled={isUndetectable}
                                                     onClick={() => {
-                                                        if (isUndetectable) return;
                                                         // @ts-ignore
                                                         setDisguiseMode(option.id);
                                                         // @ts-ignore
                                                         window.electronAPI?.setDisguise(option.id);
-                                                        // Analytics
                                                         analytics.trackModeSelected(`disguise_${option.id}`);
                                                     }}
                                                     className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
                                                         ? 'bg-accent-primary border-accent-primary text-on-accent shadow-lg shadow-[var(--accent-shadow-20)]'
                                                         : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
-                                                        } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
+                                                        }`}
                                                 >
                                                     <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-on-accent-surface text-on-accent' : 'bg-bg-item-surface text-text-secondary'
                                                         }`}>
@@ -2475,9 +2432,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
-                            )}
-                            {activeTab === 'natively-api' && (
-                                <NativelyApiSettings initialIsSaved={hasNativelyKey} />
                             )}
                             {activeTab === 'keybinds' && (
                                 <div className="space-y-5 animated fadeIn select-text pb-4">

@@ -5265,10 +5265,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('get-code-verification', async () => {
-    // Default OFF: code verification is currently disabled. Only true when the
-    // user has explicitly opted in via Settings → General or env override.
-    const v = SettingsManager.getInstance().get('codeVerificationEnabled');
-    return v === true;
+    // Effective runtime gate (default ON; settings false OR NATIVELY_CODE_VERIFY=off).
+    // Must match isCodeVerificationEnabled() so the UI reflects env kill-switch too.
+    return isCodeVerificationEnabled();
   });
 
   safeHandle('set-code-verification', async (_, enabled: boolean) => {

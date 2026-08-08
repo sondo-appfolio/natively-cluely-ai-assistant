@@ -91,9 +91,10 @@ export function normalizeOutputShape(input: NormalizeInput): NormalizeResult {
       }
     }
 
-    // Humanizer final pass (spoken-answer-quality sprint 2026-06-15) — strips residual
-    // corporate filler / source narration. Gates internally on answer type, so a coding /
-    // lecture / technical answer is a no-op. NOTE: the speakability TRIM was removed
+    // Humanizer final pass (spoken-answer-quality sprint 2026-06-15 + SWE-SPOKEN) —
+    // strips residual corporate filler / source narration / em dashes. Gates internally
+    // on answer type: coding / lecture / system_design are no-ops; Behavioral +
+    // technical_concept_answer are in scope. NOTE: the speakability TRIM was removed
     // 2026-06-16 (it cropped the conclusion off long answers); length is the model's job via
     // the prompt, so the WTA path no longer trims either.
     if (input.answerType) {

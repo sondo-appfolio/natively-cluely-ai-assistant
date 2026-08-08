@@ -76,7 +76,7 @@ test('enter hides overlay, engages undetectable, keeps session active', async ()
   assert.equal(state.endMeetingCalls, 0, 'enter must not end the meeting');
 });
 
-test('exit restores prior undetectable + overlay visibility', async () => {
+test('exit restores overlay but keeps undetectable sticky (stealth-sticky-after-session)', async () => {
   const { TwoDeviceStealthSession } = await loadSession();
   const session = new TwoDeviceStealthSession();
   const { host, state } = fakeHost({ undetectable: false, overlayVisible: true });
@@ -87,7 +87,7 @@ test('exit restores prior undetectable + overlay visibility', async () => {
   assert.equal(result.ok, true);
   assert.equal(result.active, false);
   assert.equal(result.action, 'exit');
-  assert.equal(state.undetectable, false, 'restore prior undetectable=false');
+  assert.equal(state.undetectable, true, 'must not restore prior detectable');
   assert.equal(state.overlayVisible, true);
   assert.equal(state.showCalls, 1);
   assert.equal(session.isActive(), false);

@@ -218,9 +218,12 @@ describe('humanizeForAnswerType — broad spoken denylist gates the rewriter', (
   const filler = 'I bring a unique blend and leverage my technical rigor.';
   // The curated directive set PLUS the broader spoken types real sessions showed filler on
   // (profile_fact_answer, follow_up_answer, unknown_answer, general_meeting_answer).
+  // SWE-SPOKEN: technical_concept_answer is also spoken aloud in the interview triad —
+  // final-pass humanize applies (corporate filler / em-dash); coding/SD stay preserved.
   const spoken = [
     'identity_answer', 'jd_fit_answer', 'gap_analysis_answer', 'sales_answer',
-    'behavioral_interview_answer', 'profile_fact_answer', 'follow_up_answer',
+    'behavioral_interview_answer', 'technical_concept_answer',
+    'profile_fact_answer', 'follow_up_answer',
     'unknown_answer', 'general_meeting_answer',
   ];
   for (const t of spoken) {
@@ -232,7 +235,7 @@ describe('humanizeForAnswerType — broad spoken denylist gates the rewriter', (
   }
   // Structured/precision types must stay byte-for-byte (the rewriter would risk them).
   const preserved = [
-    'coding_question_answer', 'dsa_question_answer', 'technical_concept_answer',
+    'coding_question_answer', 'dsa_question_answer',
     'lecture_answer', 'system_design_answer', 'debugging_question_answer',
     'project_link_answer', 'source_code_evidence_answer', 'ethical_usage_answer',
   ];

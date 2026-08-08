@@ -1,0 +1,3 @@
+# One SWE interview session; product-retire non-SWE modes
+
+The product is a Software Engineer interview coach, not a multi-mode meeting OS. Ship a single Modes Manager template `technical-interview` (**swe-interview-session**); Coding / Technical / Behavioral are AnswerPlanner answer-type legs (**swe-triad-answer-types**), not three mode pickers. Product-retire Sales, Lecture, Seminar, Recruiting from chrome/routing without hard-deleting templates (recoverable later); migrate looking-for-work to `technical-interview`. Rejected: three selectable modes (friction + wrong-mode failures); hard-deleting Sales/Lecture code in the same change.

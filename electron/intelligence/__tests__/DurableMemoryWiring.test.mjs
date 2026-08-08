@@ -6,8 +6,9 @@
 // to ~120s on EVERY final segment by `evictOldEntries()`. So the intended 2h window
 // silently only ever saw the last ~2 minutes: a project named at minute 1 was already
 // gone by minute 3. The fix routes that read through getDurableContext(), which reads
-// the persisted `fullTranscript` (survives the 120s eviction), behind the default-OFF
-// `durableMemoryWindow` flag (env NATIVELY_DURABLE_MEMORY_WINDOW).
+// the persisted `fullTranscript` (survives the 120s eviction), behind the
+// `durableMemoryWindow` flag (env NATIVELY_DURABLE_MEMORY_WINDOW; default ON for
+// SWE coach same-session recall — env/settings can still force OFF).
 //
 // This test proves the bug and the fix at the SOURCE level against the REAL compiled
 // SessionTracker (no time-mocking needed: addTranscript honors each segment's own
@@ -134,35 +135,35 @@ describe('SessionTracker: durable vs evicted memory window (source-level)', () =
   });
 });
 
-describe('durableMemoryWindow flag: flips the source, defaults OFF, fresh read', () => {
+describe('durableMemoryWindow flag: flips the source, defaults ON, fresh read', () => {
   beforeEach(clearEnv);
   afterEach(clearEnv);
 
-  test('defaults OFF (current getContext path preserved until opted in)', () => {
-    assert.equal(isDurableMemoryWindowEnabled(), false);
+  test('defaults ON (SWE coach same-session recall; LiveTranscriptBrain + attribution)', () => {
+    assert.equal(isDurableMemoryWindowEnabled(), true);
   });
 
-  test('NATIVELY_DURABLE_MEMORY_WINDOW=1 enables it (fresh env read, no cache)', () => {
-    process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '1';
-    assert.equal(isDurableMemoryWindowEnabled(), true, 'env=1 must enable the durable window');
+  test('NATIVELY_DURABLE_MEMORY_WINDOW=0 forces OFF; unset returns to default ON', () => {
+    process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '0';
+    assert.equal(isDurableMemoryWindowEnabled(), false, 'env=0 must disable the durable window');
     delete process.env.NATIVELY_DURABLE_MEMORY_WINDOW;
-    assert.equal(isDurableMemoryWindowEnabled(), false, 'removing the env var must flip back OFF without any cache reset');
+    assert.equal(isDurableMemoryWindowEnabled(), true, 'removing the env var must restore default ON without any cache reset');
   });
 
-  test('END-TO-END (source-level): the flag genuinely selects which method the engine ternary would call', () => {
-    // The engine line is exactly:
+  test('END-TO-END (source-level): the flag genuinely selects which method the brain ternary would call', () => {
+    // LiveTranscriptBrain.getMemoryWindow:
     //   isDurableMemoryWindowEnabled() ? session.getDurableContext(W) : session.getContext(W)
-    // We reproduce that ternary against the real tracker and assert the recall outcome
-    // flips with the flag — this + the one-line engine ternary = end-to-end proof.
+    // IntelligenceEngine's live SessionMemory path always uses getDurableContext when
+    // LSM is enabled; this ternary still gates the brain facade + attribution marker.
     const s = buildAgedSession();
     const pickSource = () =>
       isDurableMemoryWindowEnabled() ? s.getDurableContext(WINDOW) : s.getContext(WINDOW);
 
-    // Flag OFF → getContext → entity NOT recalled (today's behavior).
-    assert.equal(pickSource().some((i) => i.text.includes(PROJECT)), false, 'flag OFF must reproduce the bug (no long-range recall)');
+    // Default ON → getDurableContext → entity recalled.
+    assert.equal(pickSource().some((i) => i.text.includes(PROJECT)), true, 'default ON must recall the long-range entity');
 
-    // Flag ON → getDurableContext → entity recalled (the fix).
-    process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '1';
-    assert.equal(pickSource().some((i) => i.text.includes(PROJECT)), true, 'flag ON must recall the long-range entity');
+    // Forced OFF → getContext → entity NOT recalled (legacy 120s eviction).
+    process.env.NATIVELY_DURABLE_MEMORY_WINDOW = '0';
+    assert.equal(pickSource().some((i) => i.text.includes(PROJECT)), false, 'env OFF must reproduce the short-window miss');
   });
 });

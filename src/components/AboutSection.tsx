@@ -44,9 +44,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Cpu size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Stateful "Intelligence OS"</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">SWE Interview Session</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Transitioned to a stateful control plane with mode-aware priors (Sales, Technical, Lecture) that automatically route queries and filter context based on your active task.
+                                    One Technical Interview session routes each turn across Coding, Technical (including system design), and Behavioral answers — no Sales or Lecture mode switching mid-call.
                                 </p>
                             </div>
                         </div>
@@ -124,9 +124,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Cpu size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Stateful Intelligence OS</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Always-stealth SWE coach</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Acts as a persistent control plane using mode-aware priors (Sales, Technical, Lecture) to dynamically filter context and direct queries to the optimal reasoning engine.
+                                    Interview sessions start undetectable with a system disguise. Answer planning stays on the Software Engineer triad under the Technical Interview session.
                                 </p>
                             </div>
                         </div>

@@ -23,6 +23,7 @@
 
 import type { AnswerType, AnswerSource } from './AnswerPlanner';
 import type { ModeSourceContract } from '../services/modeSourceContract';
+import { resolveModePriorTemplate } from '../services/sweModeProductPolicy';
 
 /** Mirror of ModesManager's ModeTemplateType (kept local so this module stays
  *  pure and AnswerPlanner never imports from services/). Structurally identical
@@ -163,7 +164,9 @@ export function applyModeFallback(
 ): AnswerType {
     if (!fellThrough || !activeMode) return answerType;
     if (!FALLTHROUGH_TYPES.has(answerType)) return answerType;
-    const profile = MODE_CONTEXT_PROFILES[activeMode.templateType];
+    // non-swe-modes-product-retire: hard-out / looking-for-work priors collapse to TI.
+    const priorTemplate = resolveModePriorTemplate(activeMode.templateType) as ModeTemplateType;
+    const profile = MODE_CONTEXT_PROFILES[priorTemplate];
     if (!profile) return answerType;
     const fallback = source === 'manual_input'
         ? profile.fallbackManualAnswerType
