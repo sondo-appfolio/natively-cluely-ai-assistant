@@ -102,15 +102,13 @@ describe('formatAnswerPlanForPrompt — spec emission gated by the flag', () => 
 });
 
 describe('Settings / IPC / UI contract — toggle still works with default ON', () => {
-  test('get-code-verification IPC defaults ON when setting unset (v !== false)', () => {
+  test('get-code-verification IPC returns isCodeVerificationEnabled() (env + settings)', () => {
     const src = readSrc('electron/ipcHandlers.ts');
     const block = src.slice(
       src.indexOf("safeHandle('get-code-verification'"),
       src.indexOf("safeHandle('set-code-verification'"),
     );
-    assert.match(block, /codeVerificationEnabled/);
-    assert.match(block, /v !== false|v == null \? true|typeof v === 'boolean' \? v : true/);
-    assert.doesNotMatch(block, /v === true/);
+    assert.match(block, /return isCodeVerificationEnabled\(\)/);
     assert.doesNotMatch(block, /Default OFF/);
   });
 
